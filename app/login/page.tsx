@@ -4,57 +4,84 @@ import type React from "react"
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { Eye, EyeOff } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { useToast } from "@/components/ui/use-toast"
 import { Input } from "@/components/ui/input"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { loginUser } from "@/services/api-wrapper"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  })
   const { toast } = useToast()
-  const router = useRouter()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFormData({
+      ...formData,
+      [name]: value,
+    })
+    // Clear error when user starts typing again
+    if (error) setError(null)
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
+    setError(null)
+
+    // Validate form
+    if (!formData.email || !formData.password) {
+      setError("Please enter both email and password.")
+      return
+    }
+
+    setIsLoggingIn(true)
 
     try {
-      const result = await loginUser({ email, password })
+      // Login the user
+      const result = await loginUser({
+        email: formData.email,
+        password: formData.password,
+      })
 
       if (result.success) {
-        // Store token in localStorage or cookies
+        toast({
+          title: "Login Successful!",
+          description: "Welcome back! Redirecting to dashboard...",
+        })
+
+        // Store the token in both localStorage and sessionStorage
         if (result.token) {
           localStorage.setItem("authToken", result.token)
+          sessionStorage.setItem("authToken", result.token)
+
+          console.log("Token stored successfully:", result.token.substring(0, 10) + "...")
+        } else {
+          console.warn("No token received from login API")
         }
 
-        toast({
-          title: "Success!",
-          description: "You have successfully logged in.",
-        })
+        console.log("Login successful, redirecting to dashboard...")
 
-        // Redirect to dashboard
-        router.push("/dashboard")
+        // Use direct window location change for more reliable redirection
+        window.location.href = "/dashboard"
       } else {
-        toast({
-          title: "Login Failed",
-          description: result.message,
-          variant: "destructive",
-        })
+        setError(result.message || "Invalid email or password.")
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      })
+      if (error instanceof Error) {
+        setError(error.message)
+      } else {
+        setError("An unexpected error occurred. Please try again.")
+      }
     } finally {
-      setIsLoading(false)
+      setIsLoggingIn(false)
     }
   }
 
@@ -90,36 +117,51 @@ export default function LoginPage() {
             <p className="text-gray-600">Login to your account</p>
           </div>
 
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">
                 Email ID
               </label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 placeholder="Email ID"
                 required
                 className="h-12 bg-gray-50"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={formData.email}
+                onChange={handleInputChange}
               />
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
-              </label>
+              <div className="flex justify-between">
+                <label htmlFor="password" className="text-sm font-medium">
+                  Password
+                </label>
+                <Link href="/forgot-password" className="text-sm text-[#1B9D65] hover:underline">
+                  Forgot Password?
+                </Link>
+              </div>
               <div className="relative">
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter Password"
                   required
                   className="h-12 bg-gray-50 pr-12"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={formData.password}
+                  onChange={handleInputChange}
                 />
                 <button
                   type="button"
@@ -131,22 +173,28 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <button
+            <motion.button
               type="submit"
-              disabled={isLoading}
-              className="w-full h-12 bg-[#1B9D65] text-white rounded-lg font-medium hover:bg-[#1B9D65]/90 transition-colors disabled:opacity-50"
+              disabled={isLoggingIn}
+              className="w-full h-12 bg-[#1B9D65] text-white rounded-lg font-medium hover:bg-[#1B9D65]/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
-              {isLoading ? "Logging in..." : "LOGIN"}
-            </button>
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Logging in...
+                </>
+              ) : (
+                <>
+                  LOGIN
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </motion.button>
           </form>
 
-          {/* Links */}
-          <div className="mt-6 text-center">
-            <Link href="/forgot-password" className="text-[#1B9D65] hover:underline text-sm">
-              Forgot Password?
-            </Link>
-          </div>
-
+          {/* Sign Up Link */}
           <div className="mt-8 text-center">
             <p className="text-gray-600">
               Don't have an account?{" "}

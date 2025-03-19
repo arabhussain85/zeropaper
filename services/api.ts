@@ -1,138 +1,105 @@
-// API service for Zero Paper User
-
-import { safeParseJSON, getErrorMessage, createErrorMessage } from "@/utils/api-helpers"
+import { type NextRequest, NextResponse } from "next/server"
 
 const BASE_URL = "https://services.stage.zeropaper.online/api/zpu"
 
-// Function to send OTP to email - updated to use query parameter
-export async function sendOTP(email: string): Promise<{ success: boolean; message: string }> {
+export async function POST(request: NextRequest) {
   try {
-    console.log("Sending OTP to:", email)
+    const body = await request.json()
+    const { action, ...data } = body
 
-    // Using the correct endpoint format with query parameter
-    const response = await fetch(`${BASE_URL}/otp/email/send?email=${encodeURIComponent(email)}`, {
-      method: "POST",
-      headers: {
-        accept: "*/*"
-      }
-    });
-    
+    let endpoint = ""
+    let requestBody = null
+    let queryParams = ""
 
-    if (!response.ok) {
-      const errorMessage = await getErrorMessage(response)
-      throw new Error(errorMessage)
+    // Determine which endpoint to call based on the action
+    switch (action) {
+      case "sendOTP":
+        endpoint = `/otp/email/send`
+        queryParams = `?email=${encodeURIComponent(data.email)}`
+        break
+      case "register":
+        endpoint = "/users/register"
+        // Format the request body exactly as the API expects
+        requestBody = JSON.stringify({
+          email: data.email,
+          phoneCountryCode: data.phoneCountryCode,
+          phoneNumber: data.phoneNumber,
+          country: data.country,
+          name: data.name,
+          password: data.password,
+          otp: data.otp,
+        })
+        break
+      case "login":
+        endpoint = "/users/login"
+        queryParams = `?email=${encodeURIComponent(data.email)}&password=${encodeURIComponent(data.password)}`
+        break
+      case "resetPassword":
+        endpoint = "/users/forgot-password"
+        requestBody = JSON.stringify(data)
+        break
+      default:
+        return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }
 
-    return { success: true, message: "OTP sent successfully" }
-  } catch (error) {
-    console.error("Error sending OTP:", error)
-    return {
-      success: false,
-      message: createErrorMessage(error),
-    }
-  }
-}
+    // Log the request (without sensitive data)
+    const logUrl = `${BASE_URL}${endpoint}${queryParams ? queryParams.replace(/password=[^&]+/, "password=***") : ""}`
+    console.log(`Proxying ${action} request to ${logUrl}`)
 
-// Function to register user
-export async function registerUser(userData: {
-  email: string
-  phoneCountryCode: string
-  phoneNumber: string
-  country: string
-  name: string
-  password: string
-  otp: string
-}): Promise<{ success: boolean; message: string; data?: any }> {
-  try {
-    const response = await fetch(`${BASE_URL}/users/register`, {
+    if (requestBody) {
+      console.log(`Request body: ${requestBody.replace(/"password":"[^"]+"/g, '"password":"***"')}`)
+    }
+
+    // Forward the request to the actual API
+    const response = await fetch(`${BASE_URL}${endpoint}${queryParams}`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
+        ...(requestBody ? { "Content-Type": "application/json" } : {}),
+        Accept: "*/*",
       },
-      body: JSON.stringify(userData),
+      body: requestBody,
     })
 
+    // Get the response as text first
+    const responseText = await response.text()
+    console.log(`${action} response status:`, response.status)
+    console.log(`${action} response body:`, responseText)
+
+    // Try to parse as JSON
+    let responseData
+    try {
+      responseData = responseText ? JSON.parse(responseText) : {}
+    } catch (error) {
+      console.error("Error parsing response as JSON:", error)
+      responseData = { message: responseText || "No response data" }
+    }
+
+    // Return the API response
     if (!response.ok) {
-      const errorMessage = await getErrorMessage(response)
-      throw new Error(errorMessage)
+      return NextResponse.json(
+        {
+          success: false,
+          error: responseData.message || `Error: ${response.status} ${response.statusText}`,
+          status: response.status,
+        },
+        { status: response.status },
+      )
     }
 
-    const data = await safeParseJSON(response)
-    return { success: true, message: "Registration successful", data }
-  } catch (error) {
-    console.error("Error registering user:", error)
-    return {
-      success: false,
-      message: createErrorMessage(error),
-    }
-  }
-}
-
-// Function to reset password
-export async function resetPassword(resetData: {
-  email: string
-  password: string
-  otp: string
-}): Promise<{ success: boolean; message: string }> {
-  try {
-    const response = await fetch(`${BASE_URL}/users/forgot-password`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(resetData),
-    })
-
-    if (!response.ok) {
-      const errorMessage = await getErrorMessage(response)
-      throw new Error(errorMessage)
-    }
-
-    await safeParseJSON(response)
-    return { success: true, message: "Password reset successful" }
-  } catch (error) {
-    console.error("Error resetting password:", error)
-    return {
-      success: false,
-      message: createErrorMessage(error),
-    }
-  }
-}
-
-// Function to login user
-export async function loginUser(credentials: {
-  email: string
-  password: string
-}): Promise<{ success: boolean; message: string; token?: string }> {
-  try {
-    const response = await fetch(`${BASE_URL}/users/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(credentials),
-    })
-
-    if (!response.ok) {
-      const errorMessage = await getErrorMessage(response)
-      throw new Error(errorMessage)
-    }
-
-    const data = await safeParseJSON(response)
-    return {
+    return NextResponse.json({
       success: true,
-      message: "Login successful",
-      token: data?.token,
-    }
+      ...responseData,
+    })
   } catch (error) {
-    console.error("Error logging in:", error)
-    return {
-      success: false,
-      message: createErrorMessage(error),
-    }
+    console.error("API route error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Internal server error",
+      },
+      { status: 500 },
+    )
   }
 }
+
 

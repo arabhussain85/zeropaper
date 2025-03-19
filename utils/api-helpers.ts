@@ -1,47 +1,57 @@
-// API helper functions
+// Helper functions for API calls
 
-/**
- * Safely parses JSON from a response, with fallback for invalid JSON
- */
-export async function safeParseJSON(response: Response): Promise<any> {
+export async function getErrorMessage(response: Response): Promise<string> {
   try {
-    return await response.json()
-  } catch (e) {
-    console.warn("Failed to parse JSON response:", e)
+    const text = await response.text()
+    if (!text || text.trim() === "") {
+      return `Error: ${response.status} ${response.statusText}`
+    }
+
+    try {
+      const data = JSON.parse(text)
+      return data.message || data.error || `Error: ${response.status} ${response.statusText}`
+    } catch (parseError) {
+      // If we can't parse as JSON, return the text
+      return text || `Error: ${response.status} ${response.statusText}`
+    }
+  } catch (error) {
+    return `Error: ${response.status} ${response.statusText}`
+  }
+}
+
+export function createErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.message === "Failed to fetch") {
+      return "Network error: Unable to connect to the server. Please check your internet connection and try again."
+    }
+    return error.message
+  }
+  return String(error)
+}
+
+export async function safeParseJSON(response: Response) {
+  try {
+    const text = await response.text()
+    if (!text || text.trim() === "") {
+      return null
+    }
+    return JSON.parse(text)
+  } catch (error) {
+    console.error("Error parsing JSON:", error)
     return null
   }
 }
 
-/**
- * Extracts error message from a response
- */
-export async function getErrorMessage(response: Response): Promise<string> {
-  const data = await safeParseJSON(response)
-  return data?.message || data?.error || `Server responded with status: ${response.status}`
-}
-
-/**
- * Checks if the error is a network error
- */
-export function isNetworkError(error: unknown): boolean {
-  return (
-    error instanceof TypeError &&
-    (error.message.includes("fetch") || error.message.includes("network") || error.message.includes("Failed to fetch"))
-  )
-}
-
-/**
- * Creates a user-friendly error message
- */
-export function createErrorMessage(error: unknown): string {
-  if (isNetworkError(error)) {
-    return "Network error: Please check your internet connection or try again later."
+// Function to handle network errors with more specific messages
+export function handleNetworkError(error: unknown): string {
+  if (error instanceof TypeError && error.message === "Failed to fetch") {
+    return "Network error: Unable to connect to the server. Please check your internet connection and try again."
   }
 
   if (error instanceof Error) {
     return error.message
   }
 
-  return "An unexpected error occurred. Please try again."
+  return String(error)
 }
 

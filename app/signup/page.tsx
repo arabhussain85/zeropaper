@@ -2,9 +2,9 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Eye, EyeOff, ArrowRight, Check, User, Mail, Phone, Lock, KeyRound, Loader2 } from "lucide-react"
+import { Eye, EyeOff, ArrowRight, Check, User, Mail, Phone, Lock, KeyRound, Loader2, AlertCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import OTPInput from "@/components/otp-input"
 import { sendOTP, registerUser } from "@/services/api-wrapper"
 import { countries } from "@/utils/country-data"
@@ -23,6 +24,8 @@ export default function SignUpPage() {
   const [isRegistering, setIsRegistering] = useState(false)
   const [otpSent, setOtpSent] = useState(false)
   const [otp, setOtp] = useState(Array(4).fill(""))
+  const [error, setError] = useState<string | null>(null)
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -34,6 +37,16 @@ export default function SignUpPage() {
   })
   const { toast } = useToast()
   const router = useRouter()
+
+  // Clear debug info after 10 seconds
+  useEffect(() => {
+    if (debugInfo) {
+      const timer = setTimeout(() => {
+        setDebugInfo(null)
+      }, 10000)
+      return () => clearTimeout(timer)
+    }
+  }, [debugInfo])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target as HTMLInputElement
@@ -49,24 +62,27 @@ export default function SignUpPage() {
         [name]: value,
       })
     }
+
+    // Clear error when user starts typing again
+    if (error) setError(null)
   }
 
   const handleSendOTP = async (e: React.MouseEvent) => {
     e.preventDefault()
+    setError(null)
+    setDebugInfo(null)
 
     // Validate email
     if (!formData.email) {
-      toast({
-        title: "Email Required",
-        description: "Please enter your email address to receive the OTP.",
-        variant: "destructive",
-      })
+      setError("Please enter your email address to receive the OTP.")
       return
     }
 
     setIsSendingOTP(true)
 
     try {
+      setDebugInfo("Sending OTP request...")
+
       // Send OTP to email
       const result = await sendOTP(formData.email)
 
@@ -76,19 +92,19 @@ export default function SignUpPage() {
           title: "OTP Sent!",
           description: "Please check your email for the verification code.",
         })
+        setDebugInfo("OTP sent successfully")
       } else {
-        toast({
-          title: "Failed to send OTP",
-          description: result.message,
-          variant: "destructive",
-        })
+        setError(result.message || "Failed to send OTP. Please try again.")
+        setDebugInfo("OTP sending failed: " + result.message)
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      })
+      if (error instanceof Error) {
+        setError(error.message)
+        setDebugInfo("Error: " + error.message)
+      } else {
+        setError("An unexpected error occurred. Please try again.")
+        setDebugInfo("Unknown error occurred")
+      }
     } finally {
       setIsSendingOTP(false)
     }
@@ -96,38 +112,31 @@ export default function SignUpPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+    setDebugInfo(null)
 
     // Validate form
     if (formData.password !== formData.confirmPassword) {
-      toast({
-        title: "Passwords don't match",
-        description: "Please make sure your passwords match.",
-        variant: "destructive",
-      })
+      setError("Passwords don't match. Please make sure your passwords match.")
       return
     }
 
     if (!otpSent) {
-      toast({
-        title: "OTP Required",
-        description: "Please request and enter the OTP before registering.",
-        variant: "destructive",
-      })
+      setError("Please request and enter the OTP before registering.")
       return
     }
 
     if (otp.some((digit) => !digit)) {
-      toast({
-        title: "Incomplete OTP",
-        description: "Please enter the complete 4-digit verification code.",
-        variant: "destructive",
-      })
+      setError("Please enter the complete 4-digit verification code.")
       return
     }
 
     setIsRegistering(true)
 
     try {
+      // Log the registration attempt
+      setDebugInfo("Attempting registration...")
+
       // Register the user with OTP
       const result = await registerUser({
         email: formData.email,
@@ -144,28 +153,34 @@ export default function SignUpPage() {
           title: "Registration Successful!",
           description: "Your account has been created. Redirecting to dashboard...",
         })
+
         // Store the token if available
         if (result.data?.token) {
-          // You can use localStorage, cookies, or a state management solution
+          // Store in both localStorage and sessionStorage for redundancy
           localStorage.setItem("authToken", result.data.token)
+          sessionStorage.setItem("authToken", result.data.token)
+
+          setDebugInfo(`Token received and stored. Redirecting to dashboard...`)
+        } else {
+          setDebugInfo(`Registration successful but no token received. Redirecting anyway...`)
         }
-        // Redirect to dashboard
+
+        // Use a direct window location change for more reliable redirection
         setTimeout(() => {
-          router.push("/dashboard")
+          window.location.href = "/dashboard"
         }, 1500)
       } else {
-        toast({
-          title: "Registration Failed",
-          description: result.message || "Please check your verification code and try again.",
-          variant: "destructive",
-        })
+        setError(result.message || "Registration failed. Please try again.")
+        setDebugInfo("Registration failed: " + result.message)
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      })
+      if (error instanceof Error) {
+        setError(error.message)
+        setDebugInfo("Error: " + error.message)
+      } else {
+        setError("An unexpected error occurred. Please try again.")
+        setDebugInfo("Unknown error occurred")
+      }
     } finally {
       setIsRegistering(false)
     }
@@ -202,6 +217,21 @@ export default function SignUpPage() {
             <h1 className="text-2xl font-bold mb-1">Welcome!</h1>
             <p className="text-gray-600">Create your account</p>
           </div>
+
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Debug Info */}
+          {debugInfo && (
+            <Alert className="mb-6 bg-blue-50 text-blue-800 border-blue-200">
+              <AlertDescription className="font-mono text-xs">{debugInfo}</AlertDescription>
+            </Alert>
+          )}
 
           {/* Form */}
           <form onSubmit={handleRegister} className="space-y-6">
