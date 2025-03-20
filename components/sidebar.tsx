@@ -3,16 +3,12 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Receipt, BarChart2, Settings, Menu, X, LogOut, User } from "lucide-react"
+import { LayoutDashboard, Receipt, BarChart2, Settings, Menu, X, LogOut, Zap, CreditCard } from "lucide-react"
 import Image from "next/image"
-import { motion, AnimatePresence } from "framer-motion"
-import { logoutUser } from "@/utils/auth-helpers"
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const pathname = usePathname()
-  // Hardcoded user data for now
-  const userData = { name: "John Doe", email: "john.doe@example.com" }
 
   // Close sidebar when route changes on mobile
   useEffect(() => {
@@ -36,193 +32,138 @@ export default function Sidebar() {
       icon: Receipt,
     },
     {
+      name: "Electricity",
+      href: "/electricity",
+      icon: Zap,
+    },
+    {
+      name: "Zero Paper Pay",
+      href: "/zero-paper-pay",
+      icon: CreditCard,
+    },
+    {
       name: "Settings",
       href: "/settings",
       icon: Settings,
     },
   ]
 
-  const sidebarVariants = {
-    open: { x: 0, transition: { type: "spring", stiffness: 300, damping: 30 } },
-    closed: { x: "-100%", transition: { type: "spring", stiffness: 300, damping: 30 } },
-  }
-
-  const menuItemVariants = {
-    open: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        y: { stiffness: 1000, velocity: -100 },
-      },
-    },
-    closed: {
-      y: 20,
-      opacity: 0,
-      transition: {
-        y: { stiffness: 1000 },
-      },
-    },
-  }
-
-  const menuIconVariants = {
-    open: { rotate: 0 },
-    closed: { rotate: 180 },
-  }
-
   return (
     <>
       {/* Mobile Menu Button */}
-      <motion.div
-        className="fixed top-4 left-4 z-50 lg:hidden"
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.2 }}
-      >
-        <motion.button
-          onClick={() => setIsOpen(!isOpen)}
-          className="p-2 bg-white rounded-lg shadow-lg"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          animate={isOpen ? "open" : "closed"}
-          variants={menuIconVariants}
-        >
+      <div className="fixed top-4 left-4 z-50 lg:hidden">
+        <button onClick={() => setIsOpen(!isOpen)} className="p-2 bg-white rounded-lg shadow-lg">
           {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </motion.button>
-      </motion.div>
+        </button>
+      </div>
 
-      {/* Sidebar */}
-      <AnimatePresence>
-        <motion.div
-          className="fixed inset-y-0 left-0 z-40 w-64 bg-white border-r shadow-lg lg:translate-x-0"
-          initial={false}
-          animate={isOpen ? "open" : "closed"}
-          variants={sidebarVariants}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        >
-          {/* Logo */}
-          <motion.div
-            className="p-6"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Link href="/dashboard" className="flex items-center gap-3">
-              <motion.div
-                className="bg-[#1B9D65] rounded-lg p-2"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <div className="w-8 h-8 relative">
-                  <Image
-                    src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Zero%20paper%20user2-05%201-2MhU8cy380KtTq1agohGg6DKTIqtzS.png"
-                    alt="Zero Paper Logo"
-                    fill
-                    className="object-contain"
-                  />
-                </div>
-              </motion.div>
-              <div className="text-xl font-bold">
-                <div>ZERO</div>
-                <div>PAPER USER</div>
-              </div>
-            </Link>
-          </motion.div>
+      {/* Sidebar for Desktop */}
+      <div className="hidden lg:block fixed inset-y-0 left-0 z-40 w-64 bg-white border-r shadow-lg">
+        <SidebarContent pathname={pathname} />
+      </div>
 
-          {/* User Profile */}
-          {userData && (
-            <motion.div
-              className="px-6 py-4 border-b"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#1B9D65]/10 rounded-full flex items-center justify-center">
-                  <User className="w-5 h-5 text-[#1B9D65]" />
-                </div>
-                <div className="overflow-hidden">
-                  <p className="font-medium truncate">{userData.name || "User"}</p>
-                  <p className="text-sm text-gray-500 truncate">{userData.email || "user@example.com"}</p>
-                </div>
-              </div>
-            </motion.div>
-          )}
+      {/* Sidebar for Mobile */}
+      {isOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 flex">
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setIsOpen(false)} />
 
-          {/* Navigation */}
-          <nav className="px-3 py-4">
-            <ul className="space-y-1">
-              {navigation.map((item, i) => {
-                const isActive = pathname === item.href
-                return (
-                  <motion.li
-                    key={item.name}
-                    variants={menuItemVariants}
-                    custom={i}
-                    initial="closed"
-                    animate="open"
-                    transition={{ delay: 0.1 * i }}
-                  >
-                    <Link
-                      href={item.href}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                        isActive ? "bg-[#1B9D65] text-white" : "hover:bg-gray-100"
-                      }`}
-                    >
-                      <motion.div
-                        initial={{ scale: 1 }}
-                        animate={{ scale: isActive ? 1.1 : 1 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 10 }}
-                      >
-                        <item.icon className="w-5 h-5" />
-                      </motion.div>
-                      <span>{item.name}</span>
-                      {isActive && (
-                        <motion.div
-                          className="absolute right-3 w-1.5 h-1.5 rounded-full bg-white"
-                          layoutId="activeIndicator"
-                          transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                        />
-                      )}
-                    </Link>
-                  </motion.li>
-                )
-              })}
-            </ul>
-          </nav>
+          {/* Sidebar */}
+          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white">
+            <SidebarContent pathname={pathname} />
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
 
-          {/* Logout Button */}
-          <motion.div
-            className="absolute bottom-0 left-0 right-0 p-6"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <motion.button
-              onClick={logoutUser}
-              className="flex items-center gap-3 px-4 py-3 w-full text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <LogOut className="w-5 h-5" />
-              <span>Logout</span>
-            </motion.button>
-          </motion.div>
-        </motion.div>
-      </AnimatePresence>
+function SidebarContent({ pathname }: { pathname: string }) {
+  const navigation = [
+    {
+      name: "Dashboard",
+      href: "/dashboard",
+      icon: LayoutDashboard,
+    },
+    {
+      name: "Analytics",
+      href: "/analytics",
+      icon: BarChart2,
+    },
+    {
+      name: "Receipts",
+      href: "/receipts",
+      icon: Receipt,
+    },
+    {
+      name: "Electricity",
+      href: "/electricity",
+      icon: Zap,
+    },
+    {
+      name: "Zero Paper Pay",
+      href: "/zero-paper-pay",
+      icon: CreditCard,
+    },
+    {
+      name: "Settings",
+      href: "/settings",
+      icon: Settings,
+    },
+  ]
 
-      {/* Overlay */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            onClick={() => setIsOpen(false)}
-            className="lg:hidden fixed inset-0 z-30 bg-black/20 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          />
-        )}
-      </AnimatePresence>
+  return (
+    <>
+      {/* Logo */}
+      <div className="p-6">
+        <Link href="/dashboard" className="flex items-center gap-3">
+          <div className="bg-[#1B9D65] rounded-lg p-2">
+            <div className="w-8 h-8 relative">
+              <Image
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Zero%20paper%20user2-05%201-2MhU8cy380KtTq1agohGg6DKTIqtzS.png"
+                alt="Zero Paper Logo"
+                fill
+                className="object-contain"
+              />
+            </div>
+          </div>
+          <div className="text-xl font-bold">
+            <div>ZERO</div>
+            <div>PAPER USER</div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Navigation */}
+      <nav className="px-3 py-4 flex-1 overflow-y-auto">
+        <ul className="space-y-1">
+          {navigation.map((item) => {
+            const isActive = pathname === item.href
+            return (
+              <li key={item.name}>
+                <Link
+                  href={item.href}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                    isActive ? "bg-[#1B9D65] text-white" : "hover:bg-gray-100"
+                  }`}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span>{item.name}</span>
+                  {isActive && <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-white" />}
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+
+      {/* Logout Button */}
+      <div className="p-6 border-t">
+        <button className="flex items-center gap-3 px-4 py-3 w-full text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+          <LogOut className="w-5 h-5" />
+          <span>Logout</span>
+        </button>
+      </div>
     </>
   )
 }
