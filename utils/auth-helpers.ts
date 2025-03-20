@@ -31,6 +31,7 @@ export function logoutUser() {
   // Clear tokens from storage
   localStorage.removeItem("authToken")
   sessionStorage.removeItem("authToken")
+  localStorage.removeItem("userData")
 
   // Redirect to login
   window.location.href = "/login"
@@ -55,4 +56,33 @@ export function getAuthToken() {
   return localStorage.getItem("authToken") || sessionStorage.getItem("authToken")
 }
 
+// Function to get user data
+export function getUserData() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  // Try to get user data from localStorage
+  try {
+    const userData = localStorage.getItem("userData")
+    if (!userData) {
+      // If no user data in localStorage, return a default user object
+      return {
+        name: "John Doe",
+        email: "john.doe@example.com",
+        // Add other default properties as needed
+      }
+    }
+
+    return JSON.parse(userData)
+  } catch (error) {
+    console.error("Error parsing user data:", error)
+    // Return a default user object in case of error
+    return {
+      name: "John Doe",
+      email: "john.doe@example.com",
+      // Add other default properties as needed
+    }
+  }
+}
 

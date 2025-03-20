@@ -3,13 +3,16 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Receipt, BarChart2, Settings, Menu, X, LogOut } from "lucide-react"
+import { LayoutDashboard, Receipt, BarChart2, Settings, Menu, X, LogOut, User } from "lucide-react"
 import Image from "next/image"
 import { motion, AnimatePresence } from "framer-motion"
+import { logoutUser } from "@/utils/auth-helpers"
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const pathname = usePathname()
+  // Hardcoded user data for now
+  const userData = { name: "John Doe", email: "john.doe@example.com" }
 
   // Close sidebar when route changes on mobile
   useEffect(() => {
@@ -125,6 +128,26 @@ export default function Sidebar() {
             </Link>
           </motion.div>
 
+          {/* User Profile */}
+          {userData && (
+            <motion.div
+              className="px-6 py-4 border-b"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#1B9D65]/10 rounded-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-[#1B9D65]" />
+                </div>
+                <div className="overflow-hidden">
+                  <p className="font-medium truncate">{userData.name || "User"}</p>
+                  <p className="text-sm text-gray-500 truncate">{userData.email || "user@example.com"}</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Navigation */}
           <nav className="px-3 py-4">
             <ul className="space-y-1">
@@ -175,6 +198,7 @@ export default function Sidebar() {
             transition={{ delay: 0.5 }}
           >
             <motion.button
+              onClick={logoutUser}
               className="flex items-center gap-3 px-4 py-3 w-full text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
