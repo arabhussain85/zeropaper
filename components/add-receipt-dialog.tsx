@@ -1,24 +1,37 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Upload, Check, Camera, Calendar, CreditCard, MapPin } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
+import {
+  ArrowLeft,
+  Upload,
+  Check,
+  Camera,
+  Calendar,
+  CreditCard,
+  MapPin,
+  Loader2,
+  AlertCircle,
+  Trash2,
+  WifiOff,
+} from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/components/ui/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { addReceipt, fileToBase64, getUserId } from "@/services/receipt-service"
 
 interface AddReceiptDialogProps {
   isOpen: boolean
   onClose: () => void
+  onSuccess?: () => void
 }
 
-export default function AddReceiptDialog({ isOpen, onClose }: AddReceiptDialogProps) {
+export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddReceiptDialogProps) {
   const [step, setStep] = useState(1)
   const [category, setCategory] = useState("")
   const [agreedToTerms, setAgreedToTerms] = useState(false)
@@ -27,40 +40,40 @@ export default function AddReceiptDialog({ isOpen, onClose }: AddReceiptDialogPr
     productName: "",
     currency: "EUR",
     price: "",
-    location: "",
-    date: "",
-    refundableDate: "",
-    validDate: "",
+    storeLocation: "",
+    date: new Date().toISOString().split('T')[0], // Current date in YYYY-MM-DD format
+    refundableUptoDate: "",
+    validUptoDate: "",
   })
-  const [imageUploaded, setImageUploaded] = useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
+  const [isOnline, setIsOnline] = useState(true)
+
+  // Check online status
+  useEffect(() => {
+    setIsOnline(navigator.onLine)
+    
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [])
 
   const handleNext = () => {
     if (step < 4) {
       setStep(step + 1)
     } else {
-      // Handle form submission
-      toast({
-        title: "Receipt Added",
-        description: "Your receipt has been successfully added.",
-        duration: 3000,
-      })
-      onClose()
-      // Reset form
-      setStep(1)
-      setCategory("")
-      setAgreedToTerms(false)
-      setFormData({
-        storeName: "",
-        productName: "",
-        currency: "EUR",
-        price: "",
-        location: "",
-        date: "",
-        refundableDate: "",
-        validDate: "",
-      })
-      setImageUploaded(false)
+      handleSubmit()
     }
   }
 
@@ -68,8 +81,29 @@ export default function AddReceiptDialog({ isOpen, onClose }: AddReceiptDialogPr
     if (step > 1) {
       setStep(step - 1)
     } else {
-      onClose()
+      handleClose()
     }
+  }
+
+  const handleClose = () => {
+    // Reset form state
+    setStep(1)
+    setCategory("")
+    setAgreedToTerms(false)
+    setFormData({
+      storeName: "",
+      productName: "",
+      currency: "EUR",
+      price: "",
+      storeLocation: "",
+      date: new Date().toISOString().split('T')[0],
+      refundableUptoDate: "",
+      validUptoDate: "",
+    })
+    setImageFile(null)
+    setImagePreview(null)
+    setError(null)
+    onClose()
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,14 +121,128 @@ export default function AddReceiptDialog({ isOpen, onClose }: AddReceiptDialogPr
     })
   }
 
-  const simulateImageUpload = () => {
-    // Simulate image upload
-    setImageUploaded(true)
-    toast({
-      title: "Image Uploaded",
-      description: "Your receipt image has been uploaded successfully.",
-      duration: 2000,
-    })
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      const file = files[0]
+
+      // Check file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Image size should be less than 5MB")
+        return
+      }
+
+      // Check file type
+      if (!file.type.startsWith("image/")) {
+        setError("Please upload an image file")
+        return
+      }
+
+      setImageFile(file)
+
+      // Create preview
+      const reader = new FileReader()
+      reader.onload = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+
+      setError(null)
+    }
+  }
+
+  const triggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click()
+    }
+  }
+
+  const removeImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const handleSubmit = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      // Show offline warning if needed
+      if (!isOnline) {
+        toast({
+          title: "You're offline",
+          description: "Your receipt will be saved locally and synced when you're back online.",
+          variant: "warning",
+        })
+      }
+
+      // Convert image to base64 if available
+      let imageBase64 = ""
+      if (imageFile) {
+        imageBase64 = await fileToBase64(imageFile)
+      }
+
+      // Format dates to ISO strings
+      const formatDate = (dateStr: string) => {
+        if (!dateStr) return undefined
+        return new Date(dateStr).toISOString()
+      }
+
+      // Get user ID
+      const uid = getUserId()
+      if (!uid && isOnline) {
+        throw new Error("User ID not found. Please log in again.")
+      }
+
+      // Prepare receipt data
+      const receiptData = {
+        uid: uid || "temp-user-id", // Use a temporary ID if not found
+        category,
+        price: Number.parseFloat(formData.price) || 0,
+        productName: formData.productName,
+        storeLocation: formData.storeLocation,
+        storeName: formData.storeName,
+        currency: formData.currency,
+        date: formatDate(formData.date) || new Date().toISOString(),
+        validUptoDate: formData.validUptoDate ? formatDate(formData.validUptoDate) : undefined,
+        refundableUptoDate: formData.refundableUptoDate ? formatDate(formData.refundableUptoDate) : undefined,
+        imageBase64,
+      }
+
+      console.log("Submitting receipt data:", { ...receiptData, imageBase64: imageBase64 ? "[BASE64 DATA]" : "none" })
+
+      // Add receipt
+      const result = await addReceipt(receiptData)
+      
+      if (!result.success) {
+        throw new Error(result.message || "Failed to add receipt")
+      }
+
+      // Show success message
+      toast({
+        title: "Receipt Added",
+        description: isOnline
+          ? "Your receipt has been successfully added."
+          : "Your receipt has been saved locally and will sync when you're back online.",
+        duration: 3000,
+      })
+
+      // Call onSuccess callback if provided
+      if (onSuccess) {
+        onSuccess()
+      }
+
+      // Close dialog and reset form
+      handleClose()
+    } catch (error) {
+      console.error("Error adding receipt:", error)
+      setError(error instanceof Error ? error.message : "Failed to add receipt. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const isStepValid = () => {
@@ -102,7 +250,7 @@ export default function AddReceiptDialog({ isOpen, onClose }: AddReceiptDialogPr
       case 1:
         return category !== "" && agreedToTerms
       case 2:
-        return imageUploaded
+        return true // Image is optional
       case 3:
         return formData.storeName !== "" && formData.productName !== "" && formData.price !== ""
       case 4:
@@ -110,45 +258,6 @@ export default function AddReceiptDialog({ isOpen, onClose }: AddReceiptDialogPr
       default:
         return false
     }
-  }
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        when: "beforeChildren",
-        staggerChildren: 0.1,
-      },
-    },
-  }
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: { type: "spring", stiffness: 300, damping: 24 },
-    },
-  }
-
-  const slideVariants = {
-    enter: (direction: number) => {
-      return {
-        x: direction > 0 ? 500 : -500,
-        opacity: 0,
-      }
-    },
-    center: {
-      x: 0,
-      opacity: 1,
-    },
-    exit: (direction: number) => {
-      return {
-        x: direction < 0 ? 500 : -500,
-        opacity: 0,
-      }
-    },
   }
 
   const getStepIcon = () => {
@@ -167,319 +276,257 @@ export default function AddReceiptDialog({ isOpen, onClose }: AddReceiptDialogPr
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md p-0 max-h-[90vh] overflow-auto">
-        <motion.div
-          className="bg-[#1B9D65] text-white p-4 sticky top-0 z-10"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
+        <div className="bg-[#1B9D65] text-white p-4 sticky top-0 z-10">
           <div className="flex items-center gap-3">
-            <motion.button
-              onClick={handleBack}
-              className="p-1 hover:bg-white/10 rounded-full transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-            >
+            <button onClick={handleBack} className="p-1 hover:bg-white/10 rounded-full transition-colors">
               <ArrowLeft className="w-6 h-6" />
-            </motion.button>
+            </button>
             <DialogTitle className="flex items-center gap-2">
-              <motion.div
-                initial={{ rotate: -10, scale: 0.9 }}
-                animate={{ rotate: 0, scale: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                {getStepIcon()}
-              </motion.div>
+              {getStepIcon()}
               Add Receipt
             </DialogTitle>
           </div>
           {/* Progress bar */}
           <div className="h-1 bg-white/20 rounded-full mt-4">
-            <motion.div
-              className="h-full bg-white rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${(step / 4) * 100}%` }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
+            <div
+              className="h-full bg-white rounded-full transition-all duration-300"
+              style={{ width: `${(step / 4) * 100}%` }}
             />
           </div>
-        </motion.div>
-
-        <div className="p-6">
-          <AnimatePresence mode="wait" custom={step}>
-            {step === 1 && (
-              <motion.div
-                key="step1"
-                custom={1}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="space-y-4"
-              >
-                <motion.h2 className="text-xl font-semibold" variants={itemVariants}>
-                  Select Category
-                </motion.h2>
-                <motion.div className="space-y-3" variants={containerVariants} initial="hidden" animate="visible">
-                  {["Business", "Personal", "Medical", "Electrical", "Other"].map((cat, index) => (
-                    <motion.button
-                      key={cat}
-                      variants={itemVariants}
-                      transition={{ delay: index * 0.05 }}
-                      onClick={() => setCategory(cat)}
-                      className={`w-full p-4 rounded-lg border text-left transition-colors flex justify-between items-center ${
-                        category === cat
-                          ? "border-[#1B9D65] bg-[#1B9D65]/5 text-[#1B9D65]"
-                          : "border-gray-200 hover:border-[#1B9D65]"
-                      }`}
-                      whileHover={{ scale: 1.02, boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <span>{cat}</span>
-                      {category === cat && (
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ type: "spring", stiffness: 500, damping: 15 }}
-                        >
-                          <Check className="w-5 h-5" />
-                        </motion.div>
-                      )}
-                    </motion.button>
-                  ))}
-                </motion.div>
-                <motion.div className="flex items-start space-x-2" variants={itemVariants}>
-                  <Checkbox
-                    id="terms"
-                    checked={agreedToTerms}
-                    onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
-                    className="data-[state=checked]:bg-[#1B9D65] data-[state=checked]:border-[#1B9D65]"
-                  />
-                  <label htmlFor="terms" className="text-sm text-gray-600">
-                    Agree with{" "}
-                    <Link href="/terms" className="text-[#1B9D65] hover:underline">
-                      terms & conditions
-                    </Link>{" "}
-                    and{" "}
-                    <Link href="/privacy" className="text-[#1B9D65] hover:underline">
-                      Privacy Policy
-                    </Link>
-                  </label>
-                </motion.div>
-              </motion.div>
-            )}
-
-            {step === 2 && (
-              <motion.div
-                key="step2"
-                custom={1}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="space-y-4"
-              >
-                <motion.h2 className="text-xl font-semibold" variants={itemVariants}>
-                  Upload Image
-                </motion.h2>
-                <motion.div
-                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                    imageUploaded ? "border-[#1B9D65] bg-[#1B9D65]/5" : "border-gray-200 hover:border-[#1B9D65]"
-                  }`}
-                  onClick={simulateImageUpload}
-                  whileHover={{ scale: 1.02, boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <motion.div
-                      className={`p-3 rounded-full ${imageUploaded ? "bg-[#1B9D65] text-white" : "bg-[#1B9D65]/10 text-[#1B9D65]"}`}
-                      initial={{ scale: 1 }}
-                      animate={{
-                        scale: [1, 1.1, 1],
-                        rotate: imageUploaded ? [0, 360] : 0,
-                      }}
-                      transition={{
-                        duration: 0.5,
-                        ease: "easeInOut",
-                        times: [0, 0.5, 1],
-                        repeat: imageUploaded ? 0 : Number.POSITIVE_INFINITY,
-                        repeatDelay: 3,
-                      }}
-                    >
-                      {imageUploaded ? <Check className="w-6 h-6" /> : <Upload className="w-6 h-6" />}
-                    </motion.div>
-                    <p className={imageUploaded ? "text-[#1B9D65] font-medium" : "text-gray-600"}>
-                      {imageUploaded ? "Image Uploaded" : "Upload Image"}
-                    </p>
-                    {imageUploaded && (
-                      <motion.p
-                        className="text-sm text-gray-500 mt-2"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                      >
-                        receipt_image.jpg
-                      </motion.p>
-                    )}
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-
-            {step === 3 && (
-              <motion.div
-                key="step3"
-                custom={1}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="space-y-4"
-              >
-                <motion.h2 className="text-xl font-semibold" variants={itemVariants}>
-                  Purchase Details
-                </motion.h2>
-                <motion.div className="space-y-4" variants={containerVariants} initial="hidden" animate="visible">
-                  <motion.div variants={itemVariants}>
-                    <label className="text-sm font-medium">Store Name</label>
-                    <Input
-                      placeholder="Store Name"
-                      className="mt-1"
-                      name="storeName"
-                      value={formData.storeName}
-                      onChange={handleInputChange}
-                    />
-                  </motion.div>
-                  <motion.div variants={itemVariants}>
-                    <label className="text-sm font-medium">Product Name</label>
-                    <Input
-                      placeholder="Product Name"
-                      className="mt-1"
-                      name="productName"
-                      value={formData.productName}
-                      onChange={handleInputChange}
-                    />
-                  </motion.div>
-                  <motion.div variants={itemVariants}>
-                    <label className="text-sm font-medium">Select Currency</label>
-                    <Select value={formData.currency} onValueChange={(value) => handleSelectChange("currency", value)}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select Currency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="EUR">EUR (€)</SelectItem>
-                        <SelectItem value="USD">USD ($)</SelectItem>
-                        <SelectItem value="GBP">GBP (£)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </motion.div>
-                  <motion.div variants={itemVariants}>
-                    <label className="text-sm font-medium">Price</label>
-                    <Input
-                      placeholder="Price"
-                      type="number"
-                      className="mt-1"
-                      name="price"
-                      value={formData.price}
-                      onChange={handleInputChange}
-                    />
-                  </motion.div>
-                  <motion.div variants={itemVariants}>
-                    <label className="text-sm font-medium">Store Location</label>
-                    <Input
-                      placeholder="Store Location"
-                      className="mt-1"
-                      name="location"
-                      value={formData.location}
-                      onChange={handleInputChange}
-                    />
-                  </motion.div>
-                </motion.div>
-              </motion.div>
-            )}
-
-            {step === 4 && (
-              <motion.div
-                key="step4"
-                custom={1}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="space-y-4"
-              >
-                <motion.h2 className="text-xl font-semibold" variants={itemVariants}>
-                  Date & Currency
-                </motion.h2>
-                <motion.div className="space-y-4" variants={containerVariants} initial="hidden" animate="visible">
-                  <motion.div variants={itemVariants}>
-                    <label className="text-sm font-medium">Date</label>
-                    <Input
-                      type="date"
-                      className="mt-1"
-                      name="date"
-                      value={formData.date}
-                      onChange={handleInputChange}
-                    />
-                  </motion.div>
-                  <motion.div variants={itemVariants}>
-                    <label className="text-sm font-medium">Refundable Date</label>
-                    <Input
-                      type="date"
-                      className="mt-1"
-                      name="refundableDate"
-                      value={formData.refundableDate}
-                      onChange={handleInputChange}
-                    />
-                  </motion.div>
-                  <motion.div variants={itemVariants}>
-                    <label className="text-sm font-medium">Valid Date</label>
-                    <Input
-                      type="date"
-                      className="mt-1"
-                      name="validDate"
-                      value={formData.validDate}
-                      onChange={handleInputChange}
-                    />
-                  </motion.div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
-        <motion.div
-          className="p-4 border-t flex gap-3 justify-between sticky bottom-0 bg-white"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Button
-            variant="outline"
-            onClick={onClose}
-            className="hover:bg-gray-100"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
+        {/* Offline warning */}
+        {!isOnline && (
+          <Alert variant="warning" className="m-4 bg-amber-50 border-amber-200">
+            <WifiOff className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              You're currently offline. Your receipt will be saved locally and synced when you're back online.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {error && (
+          <Alert variant="destructive" className="m-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="p-6">
+          {step === 1 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Select Category</h2>
+              <div className="space-y-3">
+                {["Business", "Personal", "Medical", "Electrical", "Other"].map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setCategory(cat)}
+                    className={`w-full p-4 rounded-lg border text-left transition-colors flex justify-between items-center ${
+                      category === cat
+                        ? "border-[#1B9D65] bg-[#1B9D65]/5 text-[#1B9D65]"
+                        : "border-gray-200 hover:border-[#1B9D65]"
+                    }`}
+                  >
+                    <span>{cat}</span>
+                    {category === cat && <Check className="w-5 h-5" />}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-start space-x-2">
+                <Checkbox
+                  id="terms"
+                  checked={agreedToTerms}
+                  onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
+                  className="data-[state=checked]:bg-[#1B9D65] data-[state=checked]:border-[#1B9D65]"
+                />
+                <label htmlFor="terms" className="text-sm text-gray-600">
+                  Agree with{" "}
+                  <Link href="/terms" className="text-[#1B9D65] hover:underline">
+                    terms & conditions
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/privacy" className="text-[#1B9D65] hover:underline">
+                    Privacy Policy
+                  </Link>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Upload Image</h2>
+
+              <input type="file" ref={fileInputRef} accept="image/*" onChange={handleImageUpload} className="hidden" />
+
+              {!imagePreview ? (
+                <div
+                  className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors hover:border-[#1B9D65] hover:bg-[#1B9D65]/5"
+                  onClick={triggerFileInput}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="p-3 rounded-full bg-[#1B9D65]/10 text-[#1B9D65]">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <p className="text-gray-600">Click to upload receipt image</p>
+                    <p className="text-xs text-gray-500">JPG, PNG or GIF (max. 5MB)</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="border rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-medium">Receipt Image</h3>
+                    <button onClick={removeImage} className="text-red-500 hover:text-red-700 p-1">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="relative aspect-[3/4] w-full max-w-xs mx-auto">
+                    <img
+                      src={imagePreview || "/placeholder.svg"}
+                      alt="Receipt preview"
+                      className="w-full h-full object-contain rounded-md"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <p className="text-sm text-gray-500 text-center">
+                Image is optional. You can proceed without uploading an image.
+              </p>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Purchase Details</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Store Name*</label>
+                  <Input
+                    placeholder="Store Name"
+                    className="mt-1"
+                    name="storeName"
+                    value={formData.storeName}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Product Name*</label>
+                  <Input
+                    placeholder="Product Name"
+                    className="mt-1"
+                    name="productName"
+                    value={formData.productName}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Currency*</label>
+                  <Select value={formData.currency} onValueChange={(value) => handleSelectChange("currency", value)}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select Currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EUR">EUR (€)</SelectItem>
+                      <SelectItem value="USD">USD ($)</SelectItem>
+                      <SelectItem value="GBP">GBP (£)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Price*</label>
+                  <Input
+                    placeholder="Price"
+                    type="number"
+                    step="0.01"
+                    className="mt-1"
+                    name="price"
+                    value={formData.price}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Store Location*</label>
+                  <Input
+                    placeholder="Store Location"
+                    className="mt-1"
+                    name="storeLocation"
+                    value={formData.storeLocation}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Date Information</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Purchase Date*</label>
+                  <Input
+                    type="date"
+                    className="mt-1"
+                    name="date"
+                    value={formData.date}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Refundable Until (Optional)</label>
+                  <Input
+                    type="date"
+                    className="mt-1"
+                    name="refundableUptoDate"
+                    value={formData.refundableUptoDate}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Valid Until (Optional)</label>
+                  <Input
+                    type="date"
+                    className="mt-1"
+                    name="validUptoDate"
+                    value={formData.validUptoDate}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t flex gap-3 justify-between sticky bottom-0 bg-white">
+          <Button variant="outline" onClick={handleClose} className="hover:bg-gray-100">
             Cancel
           </Button>
           <Button
             onClick={handleNext}
-            disabled={!isStepValid()}
+            disabled={!isStepValid() || isLoading}
             className="bg-[#1B9D65] text-white hover:bg-[#1B9D65]/90 disabled:bg-gray-300"
-            whileHover={{ scale: isStepValid() ? 1.05 : 1 }}
-            whileTap={{ scale: isStepValid() ? 0.95 : 1 }}
           >
-            {step === 4 ? "Save" : "Next"}
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                {step === 4 ? "Saving..." : "Processing..."}
+              </>
+            ) : step === 4 ? (
+              "Save Receipt"
+            ) : (
+              "Next"
+            )}
           </Button>
-        </motion.div>
+        </div>
       </DialogContent>
     </Dialog>
   )
 }
-

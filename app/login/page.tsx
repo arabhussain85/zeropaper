@@ -2,86 +2,91 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle } from "lucide-react"
+import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { useToast } from "@/components/ui/use-toast"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { loginUser } from "@/services/api-wrapper"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
-  const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  })
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
   const { toast } = useToast()
+  const router = useRouter()
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData({
-      ...formData,
-      [name]: value,
-    })
-    // Clear error when user starts typing again
-    if (error) setError(null)
-  }
+  // Clear debug info after 10 seconds
+  useEffect(() => {
+    if (debugInfo) {
+      const timer = setTimeout(() => {
+        setDebugInfo(null)
+      }, 10000)
+      return () => clearTimeout(timer)
+    }
+  }, [debugInfo])
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-
-    // Validate form
-    if (!formData.email || !formData.password) {
-      setError("Please enter both email and password.")
-      return
-    }
-
-    setIsLoggingIn(true)
+    setDebugInfo(null)
+    setIsLoading(true)
 
     try {
-      // Login the user
-      const result = await loginUser({
-        email: formData.email,
-        password: formData.password,
-      })
+      setDebugInfo("Attempting login...")
+
+      const result = await loginUser({ email, password })
 
       if (result.success) {
-        toast({
-          title: "Login Successful!",
-          description: "Welcome back! Redirecting to dashboard...",
-        })
-
-        // Store the token in both localStorage and sessionStorage
+        // Store token in both localStorage and sessionStorage for redundancy
         if (result.token) {
           localStorage.setItem("authToken", result.token)
           sessionStorage.setItem("authToken", result.token)
 
-          console.log("Token stored successfully:", result.token.substring(0, 10) + "...")
+          // Store user data if available
+          if (result.user) {
+            localStorage.setItem("userData", JSON.stringify(result.user))
+            console.log("User data saved in login page:", result.user)
+          } else {
+            console.error("No user data received from login")
+          }
+
+          setDebugInfo(`Login successful. Token received and stored. Redirecting to dashboard...`)
         } else {
-          console.warn("No token received from login API")
+          setDebugInfo(`Login successful but no token received. This is unusual.`)
         }
 
-        console.log("Login successful, redirecting to dashboard...")
+        toast({
+          title: "Success!",
+          description: "You have successfully logged in.",
+        })
 
-        // Use direct window location change for more reliable redirection
-        window.location.href = "/dashboard"
+        // Use a direct window location change for more reliable redirection
+        setTimeout(() => {
+          window.location.href = "/dashboard"
+        }, 1000)
       } else {
-        setError(result.message || "Invalid email or password.")
+        setError(result.message || "Login failed. Please check your credentials.")
+        setDebugInfo("Login failed: " + result.message)
       }
     } catch (error) {
       if (error instanceof Error) {
         setError(error.message)
+        setDebugInfo("Error: " + error.message)
       } else {
         setError("An unexpected error occurred. Please try again.")
+        setDebugInfo("Unknown error occurred")
       }
     } finally {
-      setIsLoggingIn(false)
+      setIsLoading(false)
     }
   }
 
@@ -125,21 +130,30 @@ export default function LoginPage() {
             </Alert>
           )}
 
+          {/* Debug Info */}
+          {debugInfo && (
+            <Alert className="mb-6 bg-blue-50 text-blue-800 border-blue-200">
+              <AlertDescription className="font-mono text-xs">{debugInfo}</AlertDescription>
+            </Alert>
+          )}
+
           {/* Form */}
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">
                 Email ID
               </label>
               <Input
                 id="email"
-                name="email"
                 type="email"
                 placeholder="Email ID"
                 required
                 className="h-12 bg-gray-50"
-                value={formData.email}
-                onChange={handleInputChange}
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  if (error) setError(null)
+                }}
               />
             </div>
 
@@ -148,20 +162,22 @@ export default function LoginPage() {
                 <label htmlFor="password" className="text-sm font-medium">
                   Password
                 </label>
-                <Link href="/forgot-password" className="text-sm text-[#1B9D65] hover:underline">
+                <Link href="/forgot-password" className="text-[#1B9D65] text-sm hover:underline">
                   Forgot Password?
                 </Link>
               </div>
               <div className="relative">
                 <Input
                   id="password"
-                  name="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter Password"
                   required
                   className="h-12 bg-gray-50 pr-12"
-                  value={formData.password}
-                  onChange={handleInputChange}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    if (error) setError(null)
+                  }}
                 />
                 <button
                   type="button"
@@ -173,14 +189,12 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <motion.button
+            <Button
               type="submit"
-              disabled={isLoggingIn}
+              disabled={isLoading}
               className="w-full h-12 bg-[#1B9D65] text-white rounded-lg font-medium hover:bg-[#1B9D65]/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
             >
-              {isLoggingIn ? (
+              {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Logging in...
@@ -191,7 +205,7 @@ export default function LoginPage() {
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
-            </motion.button>
+            </Button>
           </form>
 
           {/* Sign Up Link */}

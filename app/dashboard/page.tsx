@@ -2,11 +2,55 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Settings, Search, MoreVertical, Plus, MapPin } from "lucide-react"
+import {
+  Settings,
+  Search,
+  MoreVertical,
+  Plus,
+  MapPin,
+  Loader2,
+  AlertCircle,
+  Filter,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+} from "lucide-react"
 import Image from "next/image"
 import AddReceiptDialog from "@/components/add-receipt-dialog"
+import { getReceiptsByUserId, deleteReceipt, type Receipt } from "@/services/receipt-service"
+import { useToast } from "@/components/ui/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
+import { checkBrowserCapabilities } from "@/utils/network-debug"
 
 const categories = [
+  {
+    id: "all",
+    name: "All",
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M4 6H20M4 12H20M4 18H20"
+          stroke="#23935D"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
   {
     id: "business",
     name: "Business",
@@ -81,39 +125,145 @@ const categories = [
   },
 ]
 
-const receipts = [
-  {
-    id: 1,
-    store: "Medkart Pharmacy",
-    product: "Paracetamol Tablets",
-    date: "20 Feb, 2023",
-    validUpto: "24 Feb, 2023",
-    price: "€10",
-    address: "123 Main Street ,Citytown, USA",
-  },
-  {
-    id: 2,
-    store: "Tesco Pharmacy",
-    product: "Paracetamol Tablets",
-    date: "20 Feb, 2023",
-    validUpto: "24 Feb, 2023",
-    price: "€10",
-    address: "123 Main Street ,Citytown, USA",
-  },
-]
-
 export default function DashboardPage() {
   const [isAddReceiptOpen, setIsAddReceiptOpen] = useState(false)
-  const [activeCategory, setActiveCategory] = useState("business")
+  const [activeCategory, setActiveCategory] = useState("all")
   const [isLoaded, setIsLoaded] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [receipts, setReceipts] = useState<Receipt[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [receiptToDelete, setReceiptToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [sortBy, setSortBy] = useState("date")
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
+  const { toast } = useToast()
 
+  // Check online status
   useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => {
-      setIsLoaded(true)
-    }, 300)
-    return () => clearTimeout(timer)
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+
+    // Set initial status
+    setIsOnline(navigator.onLine)
+
+    // Add event listeners
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+
+    // Check browser capabilities
+    checkBrowserCapabilities()
+
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
   }, [])
+
+  // Fetch receipts
+  const fetchReceipts = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      // Show offline toast if not online
+      if (!navigator.onLine) {
+        toast({
+          title: "You're offline",
+          description: "Showing cached receipts. Some features may be limited.",
+          variant: "destructive",
+        })
+      }
+
+      const data = await getReceiptsByUserId()
+      setReceipts(data)
+      console.log("Fetched receipts:", data)
+    } catch (error) {
+      console.error("Error fetching receipts:", error)
+      setError(error instanceof Error ? error.message : "Failed to load receipts. Please try again.")
+    } finally {
+      setIsLoading(false)
+      setIsLoaded(true)
+      setIsRefreshing(false)
+    }
+  }
+
+  // Initial load
+  useEffect(() => {
+    fetchReceipts()
+  }, [])
+
+  // Handle refresh
+  const handleRefresh = () => {
+    setIsRefreshing(true)
+    fetchReceipts()
+  }
+
+  // Handle delete receipt
+  const handleDeleteReceipt = async () => {
+    if (!receiptToDelete) return
+
+    try {
+      setIsDeleting(true)
+      await deleteReceipt(receiptToDelete)
+
+      // Update local state
+      setReceipts(receipts.filter((receipt) => receipt.id !== receiptToDelete))
+
+      toast({
+        title: "Receipt Deleted",
+        description: "The receipt has been successfully deleted.",
+      })
+    } catch (error) {
+      console.error("Error deleting receipt:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete receipt. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleting(false)
+      setDeleteConfirmOpen(false)
+      setReceiptToDelete(null)
+    }
+  }
+
+  // Confirm delete
+  const confirmDelete = (id: string) => {
+    setReceiptToDelete(id)
+    setDeleteConfirmOpen(true)
+  }
+
+  // Filter and sort receipts
+  const filteredReceipts = receipts
+    .filter((receipt) => {
+      // Category filter
+      if (activeCategory !== "all" && receipt.category?.toLowerCase() !== activeCategory.toLowerCase()) {
+        return false
+      }
+
+      // Search filter
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase()
+        return (
+          receipt.storeName?.toLowerCase().includes(search) ||
+          receipt.productName?.toLowerCase().includes(search) ||
+          receipt.storeLocation?.toLowerCase().includes(search)
+        )
+      }
+
+      return true
+    })
+    .sort((a, b) => {
+      if (sortBy === "date") {
+        return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
+      } else if (sortBy === "price") {
+        return (b.price || 0) - (a.price || 0)
+      }
+      return 0
+    })
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -134,6 +284,38 @@ export default function DashboardPage() {
       transition: { type: "spring", stiffness: 300, damping: 24 },
     },
   }
+
+  // Format date
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "N/A"
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+    } catch (error) {
+      console.error("Error formatting date:", error)
+      return "Invalid Date"
+    }
+  }
+
+  // Get category emoji
+  const getCategoryEmoji = (category = "") => {
+    switch (category.toLowerCase()) {
+      case "medical":
+        return "💊"
+      case "electrical":
+        return "🔌"
+      case "business":
+        return "💼"
+      case "personal":
+        return "🛒"
+      default:
+        return "📝"
+    }
+  }
+
+  // Calculate total value of filtered receipts
+  const totalValue = filteredReceipts.reduce((sum, receipt) => sum + (receipt.price || 0), 0).toFixed(2)
+  const currency = filteredReceipts.length > 0 ? filteredReceipts[0]?.currency || "€" : "€"
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -162,13 +344,16 @@ export default function DashboardPage() {
                 <div>PAPER USER</div>
               </div>
             </div>
-            <motion.button
-              className="p-2 hover:bg-white/10 rounded-full transition-colors"
-              whileHover={{ scale: 1.1, rotate: 15 }}
-              whileTap={{ scale: 0.9 }}
-            >
-              <Settings className="w-6 h-6" />
-            </motion.button>
+            <div className="flex items-center gap-2">
+              {isOnline ? <Wifi className="w-5 h-5 text-white" /> : <WifiOff className="w-5 h-5 text-white" />}
+              <motion.button
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                whileHover={{ scale: 1.1, rotate: 15 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Settings className="w-6 h-6" />
+              </motion.button>
+            </div>
           </div>
 
           {/* Categories */}
@@ -205,27 +390,113 @@ export default function DashboardPage() {
         initial="hidden"
         animate={isLoaded ? "visible" : "hidden"}
       >
-        {/* Search */}
-        <motion.div className="relative mb-6" variants={itemVariants}>
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Search"
-            className="w-full h-12 pl-12 pr-4 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1B9D65]"
-          />
+        {/* Network Status Banner */}
+        {!isOnline && (
+          <Alert variant="warning" className="mb-6 bg-amber-50 border-amber-200">
+            <WifiOff className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              You're currently offline. Some features may be limited.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Search and Filters */}
+        <motion.div className="flex flex-col md:flex-row gap-4 mb-6" variants={itemVariants}>
+          <div className="relative flex-grow">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search receipts by name, store, or location"
+              className="w-full h-12 pl-12 pr-4 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1B9D65]"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-[180px] h-12">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4" />
+                  <SelectValue placeholder="Sort by" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Date (Newest)</SelectItem>
+                <SelectItem value="price">Price (Highest)</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="outline"
+              className="h-12 px-4"
+              onClick={handleRefresh}
+              disabled={isRefreshing || !isOnline}
+            >
+              {isRefreshing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Refresh
+            </Button>
+          </div>
         </motion.div>
 
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Loading state */}
+        {isLoading && (
+          <div className="flex justify-center items-center py-12">
+            <Loader2 className="w-8 h-8 text-[#1B9D65] animate-spin" />
+            <span className="ml-2 text-lg">Loading receipts...</span>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!isLoading && filteredReceipts.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-lg shadow-sm">
+            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <Image src="/placeholder.svg?height=40&width=40" alt="No receipts" width={40} height={40} />
+            </div>
+            <h3 className="text-lg font-medium mb-2">No receipts found</h3>
+            <p className="text-gray-500 mb-6">
+              {searchTerm || activeCategory !== "all"
+                ? "Try changing your search or filter criteria"
+                : "Add your first receipt to get started"}
+            </p>
+            <button
+              onClick={() => setIsAddReceiptOpen(true)}
+              className="inline-flex items-center px-4 py-2 bg-[#1B9D65] text-white rounded-md hover:bg-[#1B9D65]/90"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Add Receipt
+            </button>
+          </div>
+        )}
+
         {/* Summary */}
-        <motion.div className="flex justify-between items-center mb-6" variants={itemVariants}>
-          <h2 className="text-xl font-semibold">34 Receipts</h2>
-          <p className="text-xl font-semibold">Total €10</p>
-        </motion.div>
+        {!isLoading && filteredReceipts.length > 0 && (
+          <motion.div className="flex justify-between items-center mb-6" variants={itemVariants}>
+            <h2 className="text-xl font-semibold">{filteredReceipts.length} Receipts</h2>
+            <p className="text-xl font-semibold">
+              Total: {currency}
+              {totalValue}
+            </p>
+          </motion.div>
+        )}
 
         {/* Receipts */}
         <motion.div className="space-y-4" variants={containerVariants}>
-          {receipts.map((receipt, index) => (
+          {filteredReceipts.map((receipt, index) => (
             <motion.div
-              key={receipt.id}
+              key={receipt.id || index}
               variants={itemVariants}
               className="bg-white rounded-xl p-4 shadow-sm"
               whileHover={{ scale: 1.01, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
@@ -237,43 +508,60 @@ export default function DashboardPage() {
                     className="w-10 h-10 bg-[#1B9D65]/10 rounded-lg flex items-center justify-center"
                     whileHover={{ scale: 1.1, backgroundColor: "rgba(27, 157, 101, 0.2)" }}
                   >
-                    🏪
+                    {getCategoryEmoji(receipt.category)}
                   </motion.div>
-                  <h3 className="font-semibold">{receipt.store}</h3>
+                  <div>
+                    <h3 className="font-semibold">{receipt.storeName || "Unknown Store"}</h3>
+                    <p className="text-sm text-gray-500">{receipt.category || "Uncategorized"}</p>
+                  </div>
                 </div>
-                <motion.button
-                  className="p-1 hover:bg-gray-100 rounded-full"
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
-                >
-                  <MoreVertical className="w-5 h-5 text-gray-500" />
-                </motion.button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <motion.button
+                      className="p-1 hover:bg-gray-100 rounded-full"
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                    >
+                      <MoreVertical className="w-5 h-5 text-gray-500" />
+                    </motion.button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      className="text-red-600 cursor-pointer"
+                      onClick={() => confirmDelete(receipt.id || "")}
+                    >
+                      Delete Receipt
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-gray-500">Product Name</p>
-                  <p className="font-semibold">{receipt.product}</p>
+                  <p className="font-semibold">{receipt.productName || "No product name"}</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <p className="text-sm text-gray-500">Receipt Date</p>
-                    <p>{receipt.date}</p>
+                    <p>{formatDate(receipt.date)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Valid Upto</p>
-                    <p>{receipt.validUpto}</p>
+                    <p className="text-sm text-gray-500">Valid Until</p>
+                    <p>{receipt.validUptoDate ? formatDate(receipt.validUptoDate) : "N/A"}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Price</p>
-                    <p className="font-semibold">{receipt.price}</p>
+                    <p className="font-semibold">
+                      {receipt.currency || "€"} {(receipt.price || 0).toFixed(2)}
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 text-gray-500">
                   <MapPin className="w-4 h-4" />
-                  <p className="text-sm">{receipt.address}</p>
+                  <p className="text-sm">{receipt.storeLocation || "No location"}</p>
                 </div>
               </div>
             </motion.div>
@@ -293,7 +581,40 @@ export default function DashboardPage() {
           <Plus className="w-6 h-6" />
         </motion.button>
 
-        <AddReceiptDialog isOpen={isAddReceiptOpen} onClose={() => setIsAddReceiptOpen(false)} />
+        <AddReceiptDialog
+          isOpen={isAddReceiptOpen}
+          onClose={() => setIsAddReceiptOpen(false)}
+          onSuccess={fetchReceipts}
+        />
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the receipt from your account.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteReceipt}
+                disabled={isDeleting}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </motion.main>
     </div>
   )
