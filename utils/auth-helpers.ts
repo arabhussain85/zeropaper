@@ -1,4 +1,3 @@
-
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
@@ -37,7 +36,7 @@ export function logoutUser() {
 }
 
 // Function to set authentication token (new function)
-export function setAuthToken(token, rememberMe = false) {
+export function setAuthToken(token: string, rememberMe = false) {
   if (!token) return false
   
   // Store in the appropriate storage based on "remember me" preference
@@ -139,17 +138,17 @@ export function isAuthTokenValid() {
  * @returns {Promise<boolean>} True if token was refreshed successfully
  */
 export async function refreshAuthTokenIfNeeded() {
-  if (typeof window === "undefined") return false
+  if (typeof window === "undefined") return false;
 
   // Check if we need to refresh
   if (isAuthTokenValid()) {
-    return true // Token is still valid
+    return true; // Token is still valid
   }
 
-  console.log("Auth token needs refreshing")
+  console.log("Auth token needs refreshing");
 
   try {
-    const currentToken = getAuthToken()
+    const currentToken = getAuthToken();
     // Actual implementation of token refresh - call your API
     const response = await fetch('/api/refresh-token', {
       method: 'POST',
@@ -161,11 +160,12 @@ export async function refreshAuthTokenIfNeeded() {
         refreshToken: localStorage.getItem("refreshToken") || sessionStorage.getItem("refreshToken")
       }),
       credentials: 'include', // Include cookies if using HTTP-only cookies
+    });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error('Token refresh failed:', errorData);
-      
+
       // Clear tokens on authentication failure
       localStorage.removeItem("authToken");
       sessionStorage.removeItem("authToken");
@@ -199,9 +199,6 @@ export async function refreshAuthTokenIfNeeded() {
     localStorage.removeItem("refreshToken");
     sessionStorage.removeItem("refreshToken");
 
-    // Throw a more descriptive error
-    throw new Error("Failed to refresh authentication token. Please try logging in again.");
-    
-    return true; // Return true for development to prevent redirect loops
+    return false;
   }
 }
