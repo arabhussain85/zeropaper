@@ -1,94 +1,95 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
-import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle } from "lucide-react"
-import { useRouter } from "next/navigation"
-import Image from "next/image"
-import Link from "next/link"
-import { useToast } from "@/components/ui/use-toast"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { loginUser } from "@/services/api-wrapper"
+import type React from "react";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
+import { useToast } from "@/components/ui/use-toast";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { loginUser } from "@/services/api-wrapper";
+import { setAuthToken } from "@/utils/auth-helpers";
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [debugInfo, setDebugInfo] = useState<string | null>(null)
-  const { toast } = useToast()
-  const router = useRouter()
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const { toast } = useToast();
+  const router = useRouter();
 
   // Clear debug info after 10 seconds
   useEffect(() => {
     if (debugInfo) {
       const timer = setTimeout(() => {
-        setDebugInfo(null)
-      }, 10000)
-      return () => clearTimeout(timer)
+        setDebugInfo(null);
+      }, 10000);
+      return () => clearTimeout(timer);
     }
-  }, [debugInfo])
+  }, [debugInfo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setDebugInfo(null)
-    setIsLoading(true)
+    e.preventDefault();
+    setError(null);
+    setDebugInfo(null);
+    setIsLoading(true);
 
     try {
-      setDebugInfo("Attempting login...")
+      setDebugInfo("Attempting login...");
 
-      const result = await loginUser({ email, password })
+      const result = await loginUser({ email, password });
+      console.log("Login result:", result); // Debug the response
 
       if (result.success) {
         // Store token in both localStorage and sessionStorage for redundancy
         if (result.token) {
-          localStorage.setItem("authToken", result.token)
-          sessionStorage.setItem("authToken", result.token)
+          localStorage.setItem("authToken", result.token);
+          sessionStorage.setItem("authToken", result.token);
 
           // Store user data if available
           if (result.user) {
-            localStorage.setItem("userData", JSON.stringify(result.user))
-            console.log("User data saved in login page:", result.user)
+            localStorage.setItem("userData", JSON.stringify(result.user));
+            console.log("User data saved in login page:", result.user);
           } else {
-            console.error("No user data received from login")
+            console.error("No user data received from login");
           }
 
-          setDebugInfo(`Login successful. Token received and stored. Redirecting to dashboard...`)
+          setDebugInfo(`Login successful. Token received and stored. Redirecting to dashboard...`);
         } else {
-          setDebugInfo(`Login successful but no token received. This is unusual.`)
+          setDebugInfo(`Login successful but no token received. This is unusual.`);
         }
 
         toast({
           title: "Success!",
           description: "You have successfully logged in.",
-        })
+        });
 
         // Use a direct window location change for more reliable redirection
         setTimeout(() => {
-          window.location.href = "/dashboard"
-        }, 1000)
+          window.location.href = "/dashboard";
+        }, 1000);
       } else {
-        setError(result.message || "Login failed. Please check your credentials.")
-        setDebugInfo("Login failed: " + result.message)
+        setError(result.message || "Login failed. Please check your credentials.");
+        setDebugInfo("Login failed: " + result.message);
       }
     } catch (error) {
       if (error instanceof Error) {
-        setError(error.message)
-        setDebugInfo("Error: " + error.message)
+        setError(error.message);
+        setDebugInfo("Error: " + error.message);
       } else {
-        setError("An unexpected error occurred. Please try again.")
-        setDebugInfo("Unknown error occurred")
+        setError("An unexpected error occurred. Please try again.");
+        setDebugInfo("Unknown error occurred");
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-[#1B9D65] flex items-center justify-center p-4">
@@ -151,8 +152,8 @@ export default function LoginPage() {
                 className="h-12 bg-gray-50"
                 value={email}
                 onChange={(e) => {
-                  setEmail(e.target.value)
-                  if (error) setError(null)
+                  setEmail(e.target.value);
+                  if (error) setError(null);
                 }}
               />
             </div>
@@ -175,8 +176,8 @@ export default function LoginPage() {
                   className="h-12 bg-gray-50 pr-12"
                   value={password}
                   onChange={(e) => {
-                    setPassword(e.target.value)
-                    if (error) setError(null)
+                    setPassword(e.target.value);
+                    if (error) setError(null);
                   }}
                 />
                 <button
@@ -220,6 +221,5 @@ export default function LoginPage() {
         </motion.div>
       </div>
     </div>
-  )
+  );
 }
-

@@ -1,77 +1,80 @@
-// Enhanced network debugging utility
+// Network debugging utility
 
-// Function to log detailed network error information
-export function logNetworkError(error: unknown, context: string) {
-  console.error(`Network error in ${context}:`, error)
+// Function to log network errors with detailed information
+export function logNetworkError(error: unknown, functionName: string): void {
+  console.error(`Network Error in ${functionName}:`, error)
 
-  // Check if it's a fetch error
-  if (error instanceof TypeError && error.message.includes("fetch")) {
-    console.error("This appears to be a fetch-related error. Possible causes:")
-    console.error("- Network connectivity issues")
-    console.error("- CORS policy restrictions")
-    console.error("- The server is down or unreachable")
-    console.error("- Invalid URL or endpoint")
+  // Log additional information if it's an Error object
+  if (error instanceof Error) {
+    console.error(`Error name: ${error.name}`)
+    console.error(`Error message: ${error.message}`)
+    console.error(`Error stack: ${error.stack}`)
   }
 
-  // Check if it's a CORS error
-  if (error instanceof DOMException && error.name === "NetworkError") {
-    console.error("This appears to be a CORS-related error.")
-    console.error("The server may not allow requests from this origin.")
+  // Log browser information
+  if (typeof navigator !== "undefined") {
+    console.error(`User Agent: ${navigator.userAgent}`)
+    console.error(`Platform: ${navigator.platform}`)
+    console.error(`Online status: ${navigator.onLine ? "online" : "offline"}`)
   }
 
-  return error
+  // Log current URL if available
+  if (typeof window !== "undefined") {
+    console.error(`Current URL: ${window.location.href}`)
+  }
+
+  // Log timestamp
+  console.error(`Timestamp: ${new Date().toISOString()}`)
 }
 
-// Function to test network connectivity to a specific endpoint
-export async function testEndpoint(url: string): Promise<{
-  success: boolean
-  status?: number
-  message: string
-}> {
+// Function to test API connectivity
+export async function testApiConnectivity(apiUrl: string): Promise<boolean> {
   try {
-    console.log(`Testing endpoint connectivity: ${url}`)
+    console.log(`Testing connectivity to: ${apiUrl}`)
 
-    // First try with no-cors mode to check if the server is reachable at all
-    const noCorsResponse = await fetch(url, {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+
+    const response = await fetch(apiUrl, {
       method: "HEAD",
-      mode: "no-cors",
+      signal: controller.signal,
       cache: "no-store",
     })
 
-    console.log(`No-CORS response received:`, noCorsResponse)
+    clearTimeout(timeoutId)
 
-    // Now try with regular mode to check actual API access
-    const response = await fetch(url, {
-      method: "HEAD",
-      cache: "no-store",
-    })
-
-    return {
-      success: true,
-      status: response.status,
-      message: `Endpoint is reachable. Status: ${response.status}`,
-    }
+    console.log(`API connectivity test result: ${response.ok ? "Success" : "Failed"}`)
+    return response.ok
   } catch (error) {
-    console.error(`Endpoint test failed for ${url}:`, error)
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Unknown error occurred",
-    }
+    console.error("API connectivity test failed:", error)
+    return false
   }
 }
 
-// Function to check browser capabilities
-export function checkBrowserCapabilities() {
-  const report = {
-    fetch: typeof fetch !== "undefined",
-    localStorage: typeof localStorage !== "undefined",
-    sessionStorage: typeof sessionStorage !== "undefined",
-    cors: "fetch" in window && "credentials" in Request.prototype,
-    serviceWorker: "serviceWorker" in navigator,
-    online: navigator.onLine,
+// Function to log request details
+export function logApiRequest(url: string, method: string, headers: Record<string, string>, body?: any): void {
+  console.group(`API Request: ${method} ${url}`)
+  console.log("Headers:", headers)
+  if (body) {
+    console.log("Body:", typeof body === "string" ? body : JSON.stringify(body))
   }
+  console.groupEnd()
+}
 
-  console.log("Browser capabilities:", report)
-  return report
+// Function to log response details
+export function logApiResponse(url: string, status: number, headers: Headers, body?: any): void {
+  console.group(`API Response: ${status} ${url}`)
+  console.log("Status:", status)
+
+  const headersObj: Record<string, string> = {}
+  headers.forEach((value, key) => {
+    headersObj[key] = value
+  })
+  console.log("Headers:", headersObj)
+
+  if (body) {
+    console.log("Body:", typeof body === "string" ? body : JSON.stringify(body))
+  }
+  console.groupEnd()
 }
 

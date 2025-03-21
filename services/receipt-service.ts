@@ -1,4 +1,4 @@
-import { getAuthToken, getUserData } from "@/utils/auth-helpers"
+import { getAuthToken, getUserData, refreshAuthTokenIfNeeded } from "@/utils/auth-helpers"
 
 // Types for our receipts based on the provided schema
 export interface Receipt {
@@ -20,7 +20,8 @@ export interface Receipt {
   imageReceiptId?: string
 }
 
-const API_BASE_URL = "https://services.stage.zeropaper.online/api/zpu"
+// Use environment variable for API base URL if available, otherwise use the default
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://services.stage.zeropaper.online/api/zpu"
 
 // Helper function to handle API responses
 async function handleResponse(response: Response) {
@@ -35,6 +36,11 @@ async function handleResponse(response: Response) {
     } catch (e) {
       // If we can't parse the error as JSON, just use the status text
       console.log("Could not parse error response as JSON")
+    }
+
+    // Check for authentication errors
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Authentication failed. Please log in again.")
     }
 
     // Log the error for debugging
@@ -65,11 +71,75 @@ export async function fileToBase64(file: File): Promise<string> {
   })
 }
 
+// Check if we should use mock API
+const useMockApi = process.env.NEXT_PUBLIC_USE_MOCK_API === "true"
+
+// Function to make an authenticated API request
+async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  if (typeof window === "undefined") {
+    throw new Error("Cannot make authenticated requests server-side")
+  }
+
+  // Get the current token first
+  let token = getAuthToken()
+  
+  // If no token found, try to refresh
+  if (!token) {
+    const refreshed = await refreshAuthTokenIfNeeded()
+    if (!refreshed) {
+      throw new Error("Authentication required")
+    }
+    token = getAuthToken()
+  }
+
+  // Verify we have a token after potential refresh
+  if (!token) {
+    throw new Error("Authentication required")
+  }
+
+  // Add authorization header
+  const authOptions = {
+    ...options,
+    headers: {
+      ...options.headers,
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  }
+
+  // Make the request
+  const response = await fetch(url, authOptions)
+
+  // Handle authentication errors
+  if (response.status === 401 || response.status === 403) {
+    // Try refreshing token on auth errors
+    const refreshed = await refreshAuthTokenIfNeeded()
+    if (refreshed) {
+      // Retry request with new token
+      const newToken = getAuthToken()
+      authOptions.headers['Authorization'] = `Bearer ${newToken}`
+      return fetch(url, authOptions)
+    }
+    
+    // If refresh failed, clear tokens and throw error
+    localStorage.removeItem("authToken")
+    sessionStorage.removeItem("authToken")
+    throw new Error("Authentication failed. Please log in again.")
+  }
+
+  return response
+}
+
 // Function to add a new receipt
 export async function addReceipt(receipt: Omit<Receipt, "uid">): Promise<Receipt> {
   try {
-    const token = getAuthToken()
+    // Check if token is valid
+    const isValid = await refreshAuthTokenIfNeeded()
+    if (!isValid) {
+      throw new Error("Authentication failed. Please log in again.")
+    }
 
+    const token = getAuthToken()
     if (!token) {
       throw new Error("Authentication required")
     }
@@ -86,11 +156,22 @@ export async function addReceipt(receipt: Omit<Receipt, "uid">): Promise<Receipt
       uid: userData.uid,
     }
 
-    const response = await fetch(`${API_BASE_URL}/receipt`, {
+    console.log("Adding receipt:", JSON.stringify(receiptWithUid, null, 2))
+
+    // If using mock API, log the request and return a mock response
+    if (useMockApi) {
+      console.log("MOCK API: Adding receipt", receiptWithUid)
+      return {
+        ...receiptWithUid,
+        id: `mock-${Date.now()}`,
+        addedDate: new Date().toISOString(),
+      } as Receipt
+    }
+
+    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/add`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(receiptWithUid),
       cache: "no-store",
@@ -106,9 +187,19 @@ export async function addReceipt(receipt: Omit<Receipt, "uid">): Promise<Receipt
 
 // Function to get all receipts for the current user
 export async function getReceipts(): Promise<Receipt[]> {
-  try {
-    const token = getAuthToken()
+  return getReceiptsByUserId()
+}
 
+// Function to get all receipts for the current user
+export async function getReceiptsByUserId(): Promise<Receipt[]> {
+  try {
+    // Check if token is valid
+    const isValid = await refreshAuthTokenIfNeeded()
+    if (!isValid) {
+      throw new Error("Authentication failed. Please log in again.")
+    }
+
+    const token = getAuthToken()
     if (!token) {
       throw new Error("Authentication required")
     }
@@ -119,15 +210,48 @@ export async function getReceipts(): Promise<Receipt[]> {
       throw new Error("User ID not found")
     }
 
-    const response = await fetch(`${API_BASE_URL}/receipt/get_by_user_id?uid=${userData.uid}`, {
+    // If using mock API, return mock data
+    if (useMockApi) {
+      console.log("MOCK API: Getting receipts for user", userData.uid)
+      return [
+        {
+          id: "mock-1",
+          uid: userData.uid,
+          category: "business",
+          price: 125.5,
+          productName: "Office Supplies",
+          storeName: "Office Depot",
+          storeLocation: "123 Main St",
+          currency: "USD",
+          date: new Date().toISOString(),
+          addedDate: new Date().toISOString(),
+        },
+        {
+          id: "mock-2",
+          uid: userData.uid,
+          category: "medical",
+          price: 75.2,
+          productName: "Prescription",
+          storeName: "City Pharmacy",
+          currency: "USD",
+          date: new Date(Date.now() - 86400000).toISOString(), // Yesterday
+          addedDate: new Date(Date.now() - 86400000).toISOString(),
+        },
+      ]
+    }
+
+    console.log("Fetching receipts for user:", userData.uid)
+
+    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/get_by_user_id?uid=${userData.uid}`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
       },
       cache: "no-store",
     })
 
     const data = await handleResponse(response)
+    console.log("Receipts data:", data)
     return Array.isArray(data) ? data : []
   } catch (error) {
     console.error("Error fetching receipts:", error)
@@ -138,16 +262,38 @@ export async function getReceipts(): Promise<Receipt[]> {
 // Function to get a receipt by ID
 export async function getReceiptById(id: string): Promise<Receipt | null> {
   try {
-    const token = getAuthToken()
+    // Check if token is valid
+    const isValid = await refreshAuthTokenIfNeeded()
+    if (!isValid) {
+      throw new Error("Authentication failed. Please log in again.")
+    }
 
+    const token = getAuthToken()
     if (!token) {
       throw new Error("Authentication required")
     }
 
-    const response = await fetch(`${API_BASE_URL}/receipt/${id}`, {
+    // If using mock API, return mock data
+    if (useMockApi) {
+      console.log("MOCK API: Getting receipt by ID", id)
+      return {
+        id: id,
+        uid: "mock-user",
+        category: "business",
+        price: 125.5,
+        productName: "Office Supplies",
+        storeName: "Office Depot",
+        storeLocation: "123 Main St",
+        currency: "USD",
+        date: new Date().toISOString(),
+        addedDate: new Date().toISOString(),
+      }
+    }
+
+    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/${id}`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
       },
       cache: "no-store",
     })
@@ -163,17 +309,31 @@ export async function getReceiptById(id: string): Promise<Receipt | null> {
 // Function to update a receipt
 export async function updateReceipt(id: string, receipt: Partial<Receipt>): Promise<Receipt> {
   try {
-    const token = getAuthToken()
+    // Check if token is valid
+    const isValid = await refreshAuthTokenIfNeeded()
+    if (!isValid) {
+      throw new Error("Authentication failed. Please log in again.")
+    }
 
+    const token = getAuthToken()
     if (!token) {
       throw new Error("Authentication required")
     }
 
-    const response = await fetch(`${API_BASE_URL}/receipt/${id}`, {
+    // If using mock API, log the request and return a mock response
+    if (useMockApi) {
+      console.log("MOCK API: Updating receipt", id, receipt)
+      return {
+        ...receipt,
+        id: id,
+        updatedDate: new Date().toISOString(),
+      } as Receipt
+    }
+
+    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/${id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(receipt),
       cache: "no-store",
@@ -190,17 +350,25 @@ export async function updateReceipt(id: string, receipt: Partial<Receipt>): Prom
 // Function to delete a receipt
 export async function deleteReceipt(id: string): Promise<boolean> {
   try {
-    const token = getAuthToken()
+    // Check if token is valid
+    const isValid = await refreshAuthTokenIfNeeded()
+    if (!isValid) {
+      throw new Error("Authentication failed. Please log in again.")
+    }
 
+    const token = getAuthToken()
     if (!token) {
       throw new Error("Authentication required")
     }
 
-    const response = await fetch(`${API_BASE_URL}/receipt/delete?id=${id}`, {
+    // If using mock API, log the request and return success
+    if (useMockApi) {
+      console.log("MOCK API: Deleting receipt", id)
+      return true
+    }
+
+    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/delete?id=${id}`, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
       cache: "no-store",
     })
 
@@ -215,14 +383,25 @@ export async function deleteReceipt(id: string): Promise<boolean> {
 // Function to upload receipt image as base64
 export async function uploadReceiptImage(file: File): Promise<string> {
   try {
-    const token = getAuthToken()
+    // Check if token is valid
+    const isValid = await refreshAuthTokenIfNeeded()
+    if (!isValid) {
+      throw new Error("Authentication failed. Please log in again.")
+    }
 
+    const token = getAuthToken()
     if (!token) {
       throw new Error("Authentication required")
     }
 
     // Convert file to base64
     const base64Data = await fileToBase64(file)
+
+    // If using mock API, log the request and return a mock image ID
+    if (useMockApi) {
+      console.log("MOCK API: Uploading receipt image", file.name)
+      return `mock-image-${Date.now()}`
+    }
 
     // Create payload with base64 data
     const payload = {
@@ -231,16 +410,18 @@ export async function uploadReceiptImage(file: File): Promise<string> {
       contentType: file.type,
     }
 
-    const response = await fetch(`${API_BASE_URL}/receipt/upload`, {
+    console.log("Uploading image:", file.name, file.type, "size:", file.size)
+
+    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/upload`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
     })
 
     const data = await handleResponse(response)
+    console.log("Upload response:", data)
     return data.imageReceiptId || ""
   } catch (error) {
     console.error("Error uploading receipt image:", error)
@@ -251,16 +432,30 @@ export async function uploadReceiptImage(file: File): Promise<string> {
 // Function to get receipt image as base64
 export async function getReceiptImage(imageReceiptId: string): Promise<string> {
   try {
-    const token = getAuthToken()
+    // Check if token is valid
+    const isValid = await refreshAuthTokenIfNeeded()
+    if (!isValid) {
+      throw new Error("Authentication failed. Please log in again.")
+    }
 
+    const token = getAuthToken()
     if (!token) {
       throw new Error("Authentication required")
     }
 
-    const response = await fetch(`${API_BASE_URL}/receipts/imageBase64?imageReceiptId=${imageReceiptId}`, {
+    // If using mock API, return a mock base64 image
+    if (useMockApi) {
+      console.log("MOCK API: Getting receipt image", imageReceiptId)
+      // Return a simple 1x1 transparent pixel as base64
+      return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    }
+
+    console.log("Fetching image:", imageReceiptId)
+
+    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/imageBase64?imageReceiptId=${imageReceiptId}`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
       },
       cache: "no-store",
     })

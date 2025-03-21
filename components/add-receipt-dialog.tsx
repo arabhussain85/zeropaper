@@ -1,13 +1,12 @@
-"use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import type React from "react";
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { refreshAuthTokenIfNeeded, getAuthToken } from "@/utils/auth-helpers";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft,
   Check,
@@ -19,30 +18,30 @@ import {
   AlertCircle,
   ImageIcon,
   X,
-} from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useToast } from "@/components/ui/use-toast"
-import { addReceipt, uploadReceiptImage, fileToBase64 } from "@/services/receipt-service"
-import { getUserData } from "@/utils/auth-helpers"
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useToast } from "@/components/ui/use-toast";
+import { addReceipt, fileToBase64, prepareReceiptImage } from "@/services/api-wrapper";
+import { getUserData } from "@/utils/auth-helpers";
 
 interface AddReceiptDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  onSuccess?: () => void
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
 }
 
 export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddReceiptDialogProps) {
-  const [step, setStep] = useState(1)
-  const [category, setCategory] = useState("business")
-  const [agreedToTerms, setAgreedToTerms] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [imageUploaded, setImageUploaded] = useState(false)
-  const [imageReceiptId, setImageReceiptId] = useState("")
+  const [step, setStep] = useState(1);
+  const [category, setCategory] = useState("business");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageUploaded, setImageUploaded] = useState(false);
+  const [imageReceiptId, setImageReceiptId] = useState("");
 
   const [formData, setFormData] = useState({
     storeName: "",
@@ -54,141 +53,153 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
     validUptoDate: "",
     refundableUptoDate: "",
     receiptType: "manual",
-  })
+  });
 
-  const { toast } = useToast()
+  const { toast } = useToast();
 
   // Reset form when dialog opens
   useEffect(() => {
-    if (isOpen) {
-      setStep(1)
-      setCategory("business")
-      setAgreedToTerms(false)
-      setIsLoading(false)
-      setError(null)
-      setSuccess(false)
-      setSelectedFile(null)
-      setImagePreview(null)
-      setImageUploaded(false)
-      setImageReceiptId("")
-      setFormData({
-        storeName: "",
-        productName: "",
-        currency: "USD",
-        price: "",
-        storeLocation: "",
-        date: new Date().toISOString().split("T")[0],
-        validUptoDate: "",
-        refundableUptoDate: "",
-        receiptType: "manual",
-      })
-    }
-  }, [isOpen])
+    const initialize = async () => {
+      if (isOpen) {
+        // Reset form state
+        setStep(1);
+        setCategory("business");
+        setAgreedToTerms(false);
+        setIsLoading(false);
+        setError(null);
+        setSuccess(false);
+        setSelectedFile(null);
+        setImagePreview(null);
+        setImageUploaded(false);
+        setImageReceiptId("");
+        setFormData({
+          storeName: "",
+          productName: "",
+          currency: "USD",
+          price: "",
+          storeLocation: "",
+          date: new Date().toISOString().split("T")[0],
+          validUptoDate: "",
+          refundableUptoDate: "",
+          receiptType: "manual",
+        });
+
+        // Refresh the auth token if needed
+        await refreshAuthTokenIfNeeded();
+      }
+    };
+
+    initialize();
+  }, [isOpen]);
 
   const handleNext = () => {
-    setError(null)
+    setError(null);
 
     if (step < 4) {
-      setStep(step + 1)
+      setStep(step + 1);
     } else {
-      handleSubmit()
+      handleSubmit();
     }
-  }
+  };
 
   const handleBack = () => {
     if (step > 1) {
-      setStep(step - 1)
+      setStep(step - 1);
     } else {
-      onClose()
+      onClose();
     }
-  }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
+    const { name, value } = e.target;
     setFormData({
       ...formData,
       [name]: value,
-    })
+    });
 
     // Clear error when user starts typing
-    if (error) setError(null)
-  }
+    if (error) setError(null);
+  };
 
   const handleSelectChange = (name: string, value: string) => {
     setFormData({
       ...formData,
       [name]: value,
-    })
+    });
 
     // Clear error when user makes a selection
-    if (error) setError(null)
-  }
+    if (error) setError(null);
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
-      setSelectedFile(file)
-      setImageUploaded(false)
-      setImageReceiptId("")
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      setImageUploaded(false);
+      setImageReceiptId("");
 
       // Generate preview
       try {
-        const base64 = await fileToBase64(file)
-        setImagePreview(`data:${file.type};base64,${base64}`)
+        const base64 = await fileToBase64(file);
+        setImagePreview(`data:${file.type};base64,${base64}`);
       } catch (err) {
-        console.error("Error creating preview:", err)
+        console.error("Error creating preview:", err);
       }
 
       // Clear error when user selects a file
-      if (error) setError(null)
+      if (error) setError(null);
     }
-  }
+  };
 
-  const handleUploadImage = async () => {
-    if (!selectedFile) return
+  const handlePrepareImage = async () => {
+    if (!selectedFile) return;
 
     try {
-      setIsLoading(true)
-      setError(null)
+      setIsLoading(true);
+      setError(null);
 
-      const imageId = await uploadReceiptImage(selectedFile)
-      setImageReceiptId(imageId)
-      setImageUploaded(true)
+      // Just prepare the image and store the base64 data
+      const base64 = await fileToBase64(selectedFile);
+      setImagePreview(`data:${selectedFile.type};base64,${base64}`);
+      setImageUploaded(true);
 
       toast({
-        title: "Image Uploaded",
-        description: "Receipt image uploaded successfully.",
-      })
+        title: "Image Prepared",
+        description: "Receipt image is ready to be uploaded with your receipt.",
+      });
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to upload image")
+      setError(error instanceof Error ? error.message : "Failed to prepare image");
       toast({
-        title: "Upload Failed",
-        description: "Failed to upload receipt image.",
+        title: "Preparation Failed",
+        description: "Failed to prepare receipt image.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleSubmit = async () => {
     try {
-      setIsLoading(true)
-      setError(null)
+      setIsLoading(true);
+      setError(null);
+
+      // Refresh the auth token if needed
+      await refreshAuthTokenIfNeeded();
 
       // Validate required fields
       if (!formData.productName || !formData.storeName || !formData.date || !formData.price) {
-        setError("Please fill in all required fields")
-        setIsLoading(false)
-        return
+        setError("Please fill in all required fields");
+        setIsLoading(false);
+        return;
       }
 
       // Get user ID from auth
-      const userData = getUserData()
+      const userData = getUserData();
       if (!userData || !userData.uid) {
-        setError("User ID not found. Please log in again.")
-        setIsLoading(false)
-        return
+        setError("User ID not found. Please log in again.");
+        setIsLoading(false);
+        return;
       }
 
       // Prepare receipt data
@@ -206,71 +217,76 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
         refundableUptoDate: formData.refundableUptoDate
           ? new Date(formData.refundableUptoDate).toISOString()
           : undefined,
-        imageReceiptId: imageReceiptId || undefined,
+      };
+
+      // Get image data if available
+      let imageBase64 = null;
+      if (selectedFile && imageUploaded) {
+        imageBase64 = await prepareReceiptImage(selectedFile);
       }
 
-      // Submit receipt
-      await addReceipt(receiptData)
+      // Submit receipt with image if available
+      await addReceipt(receiptData, imageBase64 || undefined);
 
       // Show success message
-      setSuccess(true)
+      setSuccess(true);
       toast({
         title: "Receipt Added",
         description: "Your receipt has been added successfully.",
-      })
+      });
 
       // Call onSuccess callback if provided
       if (onSuccess) {
         setTimeout(() => {
-          onSuccess()
-        }, 1500)
+          onSuccess();
+        }, 1500);
       }
 
       // Close dialog after a short delay
       setTimeout(() => {
-        onClose()
-      }, 2000)
+        onClose();
+      }, 2000);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to add receipt")
+      setError(error instanceof Error ? error.message : "Failed to add receipt");
       toast({
         title: "Error",
         description: "Failed to add receipt. Please try again.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const isStepValid = () => {
     switch (step) {
       case 1:
-        return category !== "" && agreedToTerms
+        return category !== "" && agreedToTerms;
       case 2:
-        return true // Image upload is optional
+        return true; // Image upload is optional
       case 3:
-        return formData.storeName !== "" && formData.productName !== "" && formData.price !== ""
+        return formData.storeName !== "" && formData.productName !== "" && formData.price !== "";
       case 4:
-        return formData.date !== ""
+        return formData.date !== "";
       default:
-        return false
+        return false;
     }
-  }
+  };
 
   const getStepIcon = () => {
     switch (step) {
       case 1:
-        return <CreditCard className="w-6 h-6" />
+        return <CreditCard className="w-6 h-6" />;
       case 2:
-        return <Camera className="w-6 h-6" />
+        return <Camera className="w-6 h-6" />;
       case 3:
-        return <MapPin className="w-6 h-6" />
+        return <MapPin className="w-6 h-6" />;
       case 4:
-        return <Calendar className="w-6 h-6" />
+        return <Calendar className="w-6 h-6" />;
       default:
-        return <CreditCard className="w-6 h-6" />
+        return <CreditCard className="w-6 h-6" />;
     }
-  }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -464,7 +480,7 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
                         <Button
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleUploadImage()
+                            handlePrepareImage()
                           }}
                           disabled={isLoading}
                           className="bg-[#1B9D65] hover:bg-[#1B9D65]/90"
@@ -472,10 +488,10 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
                           {isLoading ? (
                             <>
                               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Uploading...
+                              Preparing...
                             </>
                           ) : (
-                            "Upload Now"
+                            "Prepare Image"
                           )}
                         </Button>
                       </motion.div>
@@ -487,7 +503,7 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
                       >
-                        Image ID: {imageReceiptId.substring(0, 8)}...
+                        Image ready to upload with receipt
                       </motion.p>
                     )}
                   </div>
@@ -697,6 +713,5 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
         </motion.div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
-
