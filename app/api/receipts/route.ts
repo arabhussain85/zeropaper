@@ -1,4 +1,3 @@
-// app/api/receipts/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 
 const BASE_URL = "https://services.stage.zeropaper.online/api/zpu/receipts"
@@ -10,88 +9,164 @@ export async function GET(request: NextRequest) {
     if (!uid) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 })
     }
-    
+
+    console.log(`Fetching receipts for user: ${uid}`)
+
+    // Forward the request to the actual API
+    const response = await fetch(`${BASE_URL}/get_by_user_id?uid=${uid}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    })
+
+    // Read the response as text first
+    const responseText = await response.text()
+
+    if (!response.ok) {
+      let errorMessage = `API error: ${response.status}`
+
+      // Try to parse as JSON if possible
+      try {
+        const errorData = JSON.parse(responseText)
+        errorMessage = errorData.error || errorMessage
+      } catch (e) {
+        // If not valid JSON, use the text directly
+        errorMessage = responseText || errorMessage
+      }
+
+      console.error(`API error (${response.status}):`, errorMessage)
+      return NextResponse.json({ error: errorMessage }, { status: response.status })
+    }
+
+    // Try to parse the response as JSON
+    try {
+      const data = JSON.parse(responseText)
+      return NextResponse.json(data)
+    } catch (e) {
+      console.error("Error parsing JSON response:", e)
+      return NextResponse.json({ error: "Invalid JSON response from API" }, { status: 500 })
+    }
+  } catch (error) {
+    console.error("Error in receipts GET API route:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
     // Get the authorization header
     const authHeader = request.headers.get("Authorization")
     if (!authHeader) {
       return NextResponse.json({ error: "Authorization header is required" }, { status: 401 })
     }
-    
-    console.log(`Proxying GET request to ${BASE_URL}/get_by_user_id?uid=${uid}`)
-    
-    // Forward the request to the actual API with additional options to help with CORS
-    const response = await fetch(`${BASE_URL}/get_by_user_id?uid=${uid}`, {
-      method: "GET",
+
+    // Get the receipt data from the request body
+    const receiptData = await request.json()
+
+    // Ensure UID is present
+    if (!receiptData.uid) {
+      return NextResponse.json({ error: "User ID is required" }, { status: 400 })
+    }
+
+    console.log("Adding new receipt:", receiptData)
+
+    // Forward the request to the actual API
+    const response = await fetch(`${BASE_URL}/add`, {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: authHeader,
         Accept: "application/json",
-        "X-Requested-With": "XMLHttpRequest",
       },
-      cache: "no-store",
-      next: { revalidate: 0 },
+      body: JSON.stringify(receiptData),
     })
-    
+
+    // Read the response as text first
+    const responseText = await response.text()
+
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`API error (${response.status}):`, errorText)
-      // Return mock data for better UX
-      return NextResponse.json([
-        {
-          id: `mock-${Date.now()}-1`,
-          uid: uid,
-          category: "Business",
-          price: 120.5,
-          productName: "Office Supplies",
-          storeLocation: "123 Business Ave, Dublin",
-          storeName: "Office Depot",
-          currency: "EUR",
-          date: new Date().toISOString(),
-          validUptoDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: `mock-${Date.now()}-2`,
-          uid: uid,
-          category: "Medical",
-          price: 45.75,
-          productName: "Prescription Medication",
-          storeLocation: "456 Health St, Dublin",
-          storeName: "City Pharmacy",
-          currency: "EUR",
-          date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          validUptoDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ])
+      let errorMessage = `API error: ${response.status}`
+
+      // Try to parse as JSON if possible
+      try {
+        const errorData = JSON.parse(responseText)
+        errorMessage = errorData.error || errorMessage
+      } catch (e) {
+        // If not valid JSON, use the text directly
+        errorMessage = responseText || errorMessage
+      }
+
+      console.error(`API error (${response.status}):`, errorMessage)
+      return NextResponse.json({ error: errorMessage }, { status: response.status })
     }
-    
-    const data = await response.json()
-    return NextResponse.json(data)
+
+    // Try to parse the response as JSON if it's not empty
+    if (!responseText) {
+      return NextResponse.json({ success: true })
+    }
+
+    try {
+      const data = JSON.parse(responseText)
+      return NextResponse.json(data)
+    } catch (e) {
+      console.warn("Response is not valid JSON:", responseText)
+      return NextResponse.json({
+        success: true,
+        message: "Receipt added successfully",
+        rawResponse: responseText,
+      })
+    }
   } catch (error) {
-    console.error("Error in receipts API route:", error)
-    // Return mock data for better UX
-    return NextResponse.json([
-      {
-        id: `mock-${Date.now()}-1`,
-        uid: request.nextUrl.searchParams.get("uid") || "unknown",
-        category: "Business",
-        price: 120.5,
-        productName: "Office Supplies (Mock)",
-        storeLocation: "123 Business Ave, Dublin",
-        storeName: "Office Depot",
-        currency: "EUR",
-        date: new Date().toISOString(),
-      },
-      {
-        id: `mock-${Date.now()}-2`,
-        uid: request.nextUrl.searchParams.get("uid") || "unknown",
-        category: "Medical",
-        price: 45.75,
-        productName: "Prescription Medication (Mock)",
-        storeLocation: "456 Health St, Dublin",
-        storeName: "City Pharmacy",
-        currency: "EUR",
-        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    ])
+    console.error("Error in receipts POST API route:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    // Get the receipt ID from the query parameters
+    const id = request.nextUrl.searchParams.get("id")
+    if (!id) {
+      return NextResponse.json({ error: "Receipt ID is required" }, { status: 400 })
+    }
+
+    console.log(`Deleting receipt: ${id}`)
+
+    // Forward the request to the actual API
+    const response = await fetch(`${BASE_URL}/delete?id=${id}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+    })
+
+    // Read the response as text first
+    const responseText = await response.text()
+
+    if (!response.ok) {
+      let errorMessage = `API error: ${response.status}`
+
+      // Try to parse as JSON if possible
+      try {
+        const errorData = JSON.parse(responseText)
+        errorMessage = errorData.error || errorMessage
+      } catch (e) {
+        // If not valid JSON, use the text directly
+        errorMessage = responseText || errorMessage
+      }
+
+      console.error(`API error (${response.status}):`, errorMessage)
+      return NextResponse.json({ error: errorMessage }, { status: response.status })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Error in receipts DELETE API route:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
