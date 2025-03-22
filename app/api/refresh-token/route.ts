@@ -49,6 +49,9 @@ export async function POST(request: NextRequest) {
     
     const data = await response.json()
     
+    // Log the successful response
+    console.log("Token refresh successful. Response:", data)
+    
     // Return the new token
     return NextResponse.json({
       token: data.token,

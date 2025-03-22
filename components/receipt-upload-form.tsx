@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/components/ui/use-toast'
+import { processReceiptWithFormData, createReceiptFormData } from '@/services/receipt-processing-service'
 import { format } from 'date-fns'
 
 const categories = [
@@ -67,16 +68,10 @@ export function ReceiptUploadForm() {
     // Create a preview URL
     const objectUrl = URL.createObjectURL(file)
     setPreviewUrl(objectUrl)
-  }
 
-  // Clean up preview URL when component unmounts
-  React.useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl)
-      }
-    }
-  }, [previewUrl])
+    // Clean up the preview URL when component unmounts
+    return () => URL.revokeObjectURL(objectUrl)
+  }
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,7 +92,7 @@ export function ReceiptUploadForm() {
       }
 
       // Validate required fields
-      const requiredFields = ['productName', 'price', 'category', 'storeName', 'storeLocation', 'currency', 'date'] as const
+      const requiredFields = ['productName', 'price', 'category', 'storeName', 'storeLocation', 'currency', 'date']
       const missingFields = requiredFields.filter(field => !formData[field])
       if (missingFields.length > 0) {
         toast({
@@ -120,16 +115,20 @@ export function ReceiptUploadForm() {
         return
       }
 
+      // Create form data with receipt details and image
+      const receiptFormData = await createReceiptFormData(
+        {
+          ...formData,
+          price: Number(formData.price),
+        },
+        file
+      )
+
       // Create FormData with receipt details
       const apiFormData = new FormData()
-      
-      // Get user ID from localStorage safely
-      const userData = localStorage.getItem('userData')
-      const userId = userData ? JSON.parse(userData).uid : ''
-      
-      apiFormData.append('uid', userId)
+      apiFormData.append('uid', localStorage.getItem('userData') ? JSON.parse(localStorage.getItem('userData')).uid : '')
       apiFormData.append('productName', formData.productName)
-      apiFormData.append('price', formData.price)
+      apiFormData.append('price', String(formData.price))
       apiFormData.append('category', formData.category)
       apiFormData.append('storeName', formData.storeName)
       apiFormData.append('storeLocation', formData.storeLocation)
@@ -139,14 +138,11 @@ export function ReceiptUploadForm() {
       apiFormData.append('refundableUptoDate', formData.refundableUptoDate)
       apiFormData.append('receiptImage', file)
 
-      // Get auth token
-      const authToken = localStorage.getItem('authToken') || ''
-
       // Process the receipt with FormData
       const response = await fetch('/api/receipts/process', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         },
         body: apiFormData
       })
@@ -158,6 +154,7 @@ export function ReceiptUploadForm() {
       }
 
       const result = await response.json()
+      const result = await processReceiptWithFormData(apiFormData)
 
       // Show success message
       toast({

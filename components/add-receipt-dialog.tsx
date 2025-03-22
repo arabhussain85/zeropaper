@@ -1,11 +1,12 @@
-import type React from "react";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { refreshAuthTokenIfNeeded, getAuthToken } from "@/utils/auth-helpers";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/components/ui/use-toast";
+import { refreshAuthTokenIfNeeded, getAuthToken, getUserData } from "@/utils/auth-helpers";
+import { fileToBase64 } from "@/services/api-wrapper";
 import {
   ArrowLeft,
   Check,
@@ -20,9 +21,6 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useToast } from "@/components/ui/use-toast";
-import { addReceipt, fileToBase64, prepareReceiptImage } from "@/services/api-wrapper";
-import { getUserData } from "@/utils/auth-helpers";
 
 interface AddReceiptDialogProps {
   isOpen: boolean;
@@ -40,7 +38,6 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageUploaded, setImageUploaded] = useState(false);
-  const [imageReceiptId, setImageReceiptId] = useState("");
 
   const [formData, setFormData] = useState({
     storeName: "",
@@ -58,42 +55,32 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
 
   // Reset form when dialog opens
   useEffect(() => {
-    const initialize = async () => {
-      if (isOpen) {
-        // Reset form state
-        setStep(1);
-        setCategory("business");
-        setAgreedToTerms(false);
-        setIsLoading(false);
-        setError(null);
-        setSuccess(false);
-        setSelectedFile(null);
-        setImagePreview(null);
-        setImageUploaded(false);
-        setImageReceiptId("");
-        setFormData({
-          storeName: "",
-          productName: "",
-          currency: "USD",
-          price: "",
-          storeLocation: "",
-          date: new Date().toISOString().split("T")[0],
-          validUptoDate: "",
-          refundableUptoDate: "",
-          receiptType: "manual",
-        });
-
-        // Refresh the auth token if needed
-        await refreshAuthTokenIfNeeded();
-      }
-    };
-
-    initialize();
+    if (isOpen) {
+      setStep(1);
+      setCategory("business");
+      setAgreedToTerms(false);
+      setIsLoading(false);
+      setError(null);
+      setSuccess(false);
+      setSelectedFile(null);
+      setImagePreview(null);
+      setImageUploaded(false);
+      setFormData({
+        storeName: "",
+        productName: "",
+        currency: "USD",
+        price: "",
+        storeLocation: "",
+        date: new Date().toISOString().split("T")[0],
+        validUptoDate: "",
+        refundableUptoDate: "",
+        receiptType: "manual",
+      });
+    }
   }, [isOpen]);
 
   const handleNext = () => {
     setError(null);
-
     if (step < 4) {
       setStep(step + 1);
     } else {
@@ -111,22 +98,12 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
-
-    // Clear error when user starts typing
+    setFormData({ ...formData, [name]: value });
     if (error) setError(null);
   };
 
   const handleSelectChange = (name: string, value: string) => {
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
-
-    // Clear error when user makes a selection
+    setFormData({ ...formData, [name]: value });
     if (error) setError(null);
   };
 
@@ -135,9 +112,7 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
       const file = e.target.files[0];
       setSelectedFile(file);
       setImageUploaded(false);
-      setImageReceiptId("");
 
-      // Generate preview
       try {
         const base64 = await fileToBase64(file);
         setImagePreview(`data:${file.type};base64,${base64}`);
@@ -145,7 +120,6 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
         console.error("Error creating preview:", err);
       }
 
-      // Clear error when user selects a file
       if (error) setError(null);
     }
   };
@@ -157,7 +131,6 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
       setIsLoading(true);
       setError(null);
 
-      // Just prepare the image and store the base64 data
       const base64 = await fileToBase64(selectedFile);
       setImagePreview(`data:${selectedFile.type};base64,${base64}`);
       setImageUploaded(true);
@@ -183,7 +156,7 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
       setIsLoading(true);
       setError(null);
 
-      // Validate required fields first
+      // Validate required fields
       if (!formData.productName || !formData.storeName || !formData.date || !formData.price || !category || !formData.currency) {
         setError("Please fill in all required fields");
         setIsLoading(false);
@@ -226,51 +199,47 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
       // Get image data if available
       let imageBase64 = null;
       if (selectedFile && imageUploaded) {
-        imageBase64 = await prepareReceiptImage(selectedFile);
+        imageBase64 = await fileToBase64(selectedFile);
       }
 
       // Submit receipt with image if available
-      const params = new URLSearchParams();
-      params.append('imageBase64', imageBase64 || '');
-      params.append('price', receiptData.price.toString());
-      params.append('productName', receiptData.productName);
-      params.append('category', category);
-      params.append('date', new Date(formData.date).toISOString());
-      params.append('storeLocation', receiptData.storeLocation);
-      params.append('storeName', receiptData.storeName);
-      params.append('uid', userData.uid);
-      params.append('currency', receiptData.currency);
-
-      if (receiptData.validUptoDate) {
-        params.append('validUptoDate', receiptData.validUptoDate);
+      const formDataEncoded = new URLSearchParams();
+      for (const [key, value] of Object.entries(receiptData)) {
+        if (value !== undefined && value !== null) {
+          formDataEncoded.append(key, value.toString());
+        }
       }
-      if (receiptData.refundableUptoDate) {
-        params.append('refundableUptoDate', receiptData.refundableUptoDate);
+      if (imageBase64) {
+        formDataEncoded.append("imageBase64", imageBase64);
       }
 
-      const response = await fetch('/api/receipt/add', {
-        method: 'POST',
+      const response = await fetch("https://services.stage.zeropaper.online/api/zpu/receipts/add", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Bearer ${getAuthToken()}`,
         },
-        body: params
+        body: formDataEncoded.toString(),
       });
-      
-      // Show success message
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to add receipt");
+      }
+
+      const data = await response.json();
       setSuccess(true);
       toast({
         title: "Receipt Added",
         description: "Your receipt has been added successfully.",
       });
 
-      // Call onSuccess callback if provided
       if (onSuccess) {
         setTimeout(() => {
           onSuccess();
         }, 1500);
       }
 
-      // Close dialog after a short delay
       setTimeout(() => {
         onClose();
       }, 2000);
@@ -473,7 +442,6 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
                             setSelectedFile(null)
                             setImagePreview(null)
                             setImageUploaded(false)
-                            setImageReceiptId("")
                           }}
                           className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full"
                         >

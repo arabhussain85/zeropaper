@@ -100,10 +100,13 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
   // Add authorization header
   const authOptions = {
     ...options,
+    mode: 'cors',
+    credentials: 'include',
     headers: {
       ...options.headers,
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      'Access-Control-Allow-Origin': '*',
     },
   }
 

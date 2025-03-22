@@ -1,128 +1,48 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { parse, format } from "date-fns"
+import { NextApiRequest, NextApiResponse } from "next";
 
-const API_BASE_URL = process.env.API_BASE_URL || "https://services.stage.zeropaper.online/api/zpu"
+const API_BASE_URL = process.env.API_BASE_URL || "https://services.stage.zeropaper.online/api/zpu";
 
-// Function to validate and parse European date format (DD.MM.YYYY HH:MM)
-function parseEuropeanDate(dateString: string): string {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
-    // Parse the European format date
-    const parsedDate = parse(dateString, "dd.MM.yyyy HH:mm", new Date())
-    
-    // Format it to ISO format for the API
-    return format(parsedDate, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-  } catch (error) {
-    console.error("Error parsing date:", error)
-    throw new Error(`Invalid date format: ${dateString}. Expected format: DD.MM.YYYY HH:MM`)
-  }
-}
+    // Extract the authorization token from the request headers
+    const authToken = req.headers.authorization;
 
-// Function to validate required fields
-function validateReceiptData(data: any): { valid: boolean; errors: string[] } {
-  const errors: string[] = []
-  const requiredFields = [
-    "imageBase64",
-    "price",
-    "productName",
-    "category",
-    "date",
-    "storeName",
-    "uid",
-    "currency"
-  ]
-
-  // Check required fields
-  for (const field of requiredFields) {
-    if (!data[field]) {
-      errors.push(`${field} is required`)
-    }
-  }
-
-  // Validate price is a number
-  if (data.price && isNaN(Number(data.price))) {
-    errors.push("price must be a valid number")
-  }
-
-  // Validate image is base64
-  if (data.imageBase64 && !data.imageBase64.match(/^[A-Za-z0-9+/=]+$/)) {
-    errors.push("imageBase64 must be a valid base64 string")
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    // Get authorization header
-    const authHeader = request.headers.get("authorization")
-    if (!authHeader) {
-      return NextResponse.json({ error: "Authorization header is required" }, { status: 401 })
+    if (!authToken) {
+      return res.status(401).json({ error: "Authorization token is required" });
     }
 
-    // Get request body
-    const body = await request.json()
+    // Convert the request body to x-www-form-urlencoded format
+    const formData = new URLSearchParams();
+    for (const [key, value] of Object.entries(req.body)) {
+      if (value !== undefined && value !== null) {
+        formData.append(key, value.toString());
+      }
+    }
 
-    console.log(`Proxying POST request to ${API_BASE_URL}/receipt with${body.imageBase64 ? "" : "out"} image data`)
-
-    // Forward the request to the actual API
-    const response = await fetch(`${API_BASE_URL}/receipt`, {
+    // Forward the request to the backend API
+    const response = await fetch(`${API_BASE_URL}/receipts/add`, {
       method: "POST",
       headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: authToken,
       },
-      body: JSON.stringify(body),
-    })
+      body: formData.toString(),
+    });
 
-    // Log response status
-    console.log(`API responded with status: ${response.status}`)
-
-    // If the response is not OK, return the error
+    // Handle the response
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`API error: ${response.status}`, errorText)
-
-      let errorMessage = `API error: ${response.status}`
-
-      // Try to parse the error response if possible
-      try {
-        const errorData = JSON.parse(errorText)
-        if (errorData.message || errorData.error) {
-          errorMessage = errorData.message || errorData.error
-        }
-      } catch (parseError) {
-        // If we can't parse as JSON, use the raw text if it's not too long
-        if (errorText && errorText.length < 200) {
-          errorMessage += ` - ${errorText}`
-        }
-      }
-
-      // Special handling for common error codes
-      if (response.status === 403) {
-        errorMessage = "Authentication failed. Your session may have expired. Please log in again."
-      } else if (response.status === 401) {
-        errorMessage = "Unauthorized. Please log in to continue."
-      } else if (response.status === 400) {
-        errorMessage = "Invalid request data. Please check your input and try again."
-      } else if (response.status === 404) {
-        errorMessage = "Resource not found. The API endpoint may have changed."
-      } else if (response.status === 500) {
-        errorMessage = "Server error. Please try again later."
-      }
-
-      return NextResponse.json({ error: errorMessage }, { status: response.status })
+      const errorData = await response.json();
+      return res.status(response.status).json({ error: errorData.message || "Failed to add receipt" });
     }
 
-    // Parse and return the response
-    const data = await response.json()
-    return NextResponse.json(data)
+    const data = await response.json();
+    return res.status(200).json(data);
   } catch (error) {
-    console.error("Error in add receipt API route:", error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
+    console.error("Error in add receipt API route:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 }
-
