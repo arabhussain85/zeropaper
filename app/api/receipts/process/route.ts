@@ -58,24 +58,57 @@ export async function POST(request: NextRequest) {
   try {
     // Get authorization header
     const authHeader = request.headers.get("authorization")
-    if (!authHeader) {
-      return NextResponse.json({ error: "Authorization header is required" }, { status: 401 })
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Valid Bearer token is required" }, { status: 401 })
     }
 
-    // Get request body
-    const body = await request.json()
+    // Parse form data
+    const formData = await request.formData()
+    const receiptData: Record<string, any> = {}
 
-    console.log(`Proxying POST request to ${API_BASE_URL}/receipt with${body.imageBase64 ? "" : "out"} image data`)
+    // Extract all form fields
+    for (const [key, value] of formData.entries()) {
+      receiptData[key] = value
+    }
+
+    // Validate the receipt data
+    const validation = validateReceiptData(receiptData)
+    if (!validation.valid) {
+      return NextResponse.json({ error: "Validation failed", details: validation.errors }, { status: 400 })
+    }
+
+    // Process dates - convert from European format to ISO
+    try {
+      if (receiptData.date) {
+        receiptData.date = parseEuropeanDate(receiptData.date)
+      }
+      if (receiptData.addedDate) {
+        receiptData.addedDate = parseEuropeanDate(receiptData.addedDate)
+      }
+      if (receiptData.updatedDate) {
+        receiptData.updatedDate = parseEuropeanDate(receiptData.updatedDate)
+      }
+      if (receiptData.validUptoDate) {
+        receiptData.validUptoDate = parseEuropeanDate(receiptData.validUptoDate)
+      }
+      if (receiptData.refundableUptoDate) {
+        receiptData.refundableUptoDate = parseEuropeanDate(receiptData.refundableUptoDate)
+      }
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Date format error" }, { status: 400 })
+    }
+
+    console.log(`Processing receipt data for user ${receiptData.uid}`)
 
     // Forward the request to the actual API
-    const response = await fetch(`${API_BASE_URL}/receipt`, {
+    const response = await fetch(`${API_BASE_URL}/receipt/process`, {
       method: "POST",
       headers: {
         Authorization: authHeader,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(receiptData),
     })
 
     // Log response status
@@ -121,8 +154,7 @@ export async function POST(request: NextRequest) {
     const data = await response.json()
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error in add receipt API route:", error)
+    console.error("Error in process receipt API route:", error)
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }
-
