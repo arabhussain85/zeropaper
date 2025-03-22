@@ -1,4 +1,3 @@
-
 import type React from "react";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -184,11 +183,8 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
       setIsLoading(true);
       setError(null);
 
-      // Refresh the auth token if needed
-      await refreshAuthTokenIfNeeded();
-
-      // Validate required fields
-      if (!formData.productName || !formData.storeName || !formData.date || !formData.price) {
+      // Validate required fields first
+      if (!formData.productName || !formData.storeName || !formData.date || !formData.price || !category || !formData.currency) {
         setError("Please fill in all required fields");
         setIsLoading(false);
         return;
@@ -198,7 +194,15 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
       const userData = getUserData();
       if (!userData || !userData.uid) {
         setError("User ID not found. Please log in again.");
-        setIsLoading(false);
+        window.location.href = "/login";
+        return;
+      }
+
+      // Refresh the auth token if needed
+      const tokenRefreshed = await refreshAuthTokenIfNeeded();
+      if (!tokenRefreshed) {
+        setError("Your session has expired. Please log in again.");
+        window.location.href = "/login";
         return;
       }
 
@@ -226,8 +230,32 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
       }
 
       // Submit receipt with image if available
-      await addReceipt(receiptData, imageBase64 || undefined);
+      const params = new URLSearchParams();
+      params.append('imageBase64', imageBase64 || '');
+      params.append('price', receiptData.price.toString());
+      params.append('productName', receiptData.productName);
+      params.append('category', category);
+      params.append('date', new Date(formData.date).toISOString());
+      params.append('storeLocation', receiptData.storeLocation);
+      params.append('storeName', receiptData.storeName);
+      params.append('uid', userData.uid);
+      params.append('currency', receiptData.currency);
 
+      if (receiptData.validUptoDate) {
+        params.append('validUptoDate', receiptData.validUptoDate);
+      }
+      if (receiptData.refundableUptoDate) {
+        params.append('refundableUptoDate', receiptData.refundableUptoDate);
+      }
+
+      const response = await fetch('/api/receipt/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params
+      });
+      
       // Show success message
       setSuccess(true);
       toast({

@@ -170,34 +170,40 @@ export async function fileToBase64(file: File): Promise<string> {
   })
 }
 
-// Helper function to create a FormData object from receipt data
-export function createReceiptFormData(receiptData: Partial<Receipt>, imageFile?: File): Promise<FormData> {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const formData = new FormData()
-      
-      // Add all receipt data to form data
-      for (const [key, value] of Object.entries(receiptData)) {
-        if (value !== undefined && value !== null) {
-          formData.append(key, value.toString())
-        }
-      }
-      
-      // If we have an image file, convert it to base64 and add it
-      if (imageFile) {
-        try {
-          const base64 = await fileToBase64(imageFile)
-          formData.append('imageBase64', base64)
-        } catch (error) {
-          console.error("Error converting image to base64:", error)
-          reject(error)
-          return
-        }
-      }
-      
-      resolve(formData)
-    } catch (error) {
-      reject(error)
+export async function createReceiptFormData(formData: any, file: File): Promise<FormData> {
+  const data = new FormData()
+
+  // Convert file to base64
+  const imageBase64 = await fileToBase64(file)
+  
+  // Required fields
+  const requiredFields = {
+    imageBase64,
+    price: formData.price.toString(),
+    productName: formData.productName,
+    category: formData.category,
+    date: new Date(formData.date).toISOString(),
+    storeLocation: formData.storeLocation,
+    storeName: formData.storeName,
+    currency: formData.currency,
+    uid: getUserData()?.uid || ''
+  }
+
+  // Add required fields
+  Object.entries(requiredFields).forEach(([key, value]) => {
+    if (!value) {
+      throw new Error(`Missing required field: ${key}`)
     }
+    data.append(key, value.toString())
   })
+
+  // Optional date fields
+  if (formData.validUptoDate) {
+    data.append('validUptoDate', new Date(formData.validUptoDate).toISOString())
+  }
+  if (formData.refundableUptoDate) {
+    data.append('refundableUptoDate', new Date(formData.refundableUptoDate).toISOString())
+  }
+
+  return data
 }

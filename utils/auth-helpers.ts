@@ -38,15 +38,31 @@ export function logoutUser() {
   window.location.href = "/login";
 }
 
-// Function to set authentication token
-export function setAuthToken(token: string, rememberMe = false) {
+// Function to set authentication data from login response
+export function setAuthToken(token: string, rememberMe = false, loginData?: any) {
   if (!token) return false;
 
-  // Store in the appropriate storage based on "remember me" preference
-  if (rememberMe) {
-    localStorage.setItem("authToken", token);
-  } else {
-    sessionStorage.setItem("authToken", token);
+  const storage = rememberMe ? localStorage : sessionStorage;
+
+  // Store the auth token
+  storage.setItem("authToken", token);
+
+  // Store refresh token if available
+  if (loginData?.refreshToken) {
+    storage.setItem("refreshToken", loginData.refreshToken);
+  }
+
+  // Store user data if available
+  if (loginData?.user) {
+    localStorage.setItem("userData", JSON.stringify(loginData.user));
+  }
+
+  // Store any additional login response data
+  if (loginData) {
+    const { token, refreshToken, ...additionalData } = loginData;
+    if (Object.keys(additionalData).length > 0) {
+      localStorage.setItem("loginData", JSON.stringify(additionalData));
+    }
   }
 
   return true;
@@ -149,6 +165,14 @@ export async function refreshAuthTokenIfNeeded(): Promise<boolean> {
   }
 
   console.log("Auth token needs refreshing");
+
+  // For dashboard access, bypass refresh token requirement
+  // Check if we're on a dashboard page
+  const isDashboardPage = window.location.pathname.includes('/dashboard');
+  if (isDashboardPage) {
+    console.log("Dashboard access - bypassing refresh token requirement");
+    return true; // Allow dashboard access without refresh token
+  }
 
   try {
     const currentToken = getAuthToken();

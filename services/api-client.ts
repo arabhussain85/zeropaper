@@ -9,7 +9,6 @@ const BASE_URL = "https://services.stage.zeropaper.online/api/zpu/receipts"
 const FALLBACK_OPTIONS = {
   useLocalProxy: true, // Use Next.js API routes as proxy
   useDirectApi: true, // Try direct API calls
-  useMockData: true, // Use mock data as last resort
   retryCount: 2, // Number of retries for each method
   retryDelay: 1000, // Delay between retries in ms
 }
@@ -103,11 +102,8 @@ export async function fetchWithFallback<T>(
     }
   }
 
-  // If we have mock data and all other methods failed, use it
-  if (FALLBACK_OPTIONS.useMockData && mockData !== undefined) {
-    console.log(`All API attempts failed. Using mock data for ${context}`)
-    return mockData
-  }
+  // If all methods failed, throw error
+  console.log(`All API attempts failed for ${context}`)
 
   // If we got here, all methods failed and we have no mock data
   logNetworkError(lastError, context)
@@ -134,46 +130,5 @@ export function getUserId(): string {
     console.error("Error getting user ID:", error)
     return ""
   }
-}
-
-// Mock data generators
-export const mockData = {
-  receipts: () => [
-    {
-      id: `mock-${Date.now()}-1`,
-      uid: getUserId() || "mock-user",
-      category: "Business",
-      price: 120.5,
-      productName: "Office Supplies",
-      storeLocation: "123 Business Ave, Dublin",
-      storeName: "Office Depot",
-      currency: "EUR",
-      date: new Date().toISOString(),
-      validUptoDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: `mock-${Date.now()}-2`,
-      uid: getUserId() || "mock-user",
-      category: "Medical",
-      price: 45.75,
-      productName: "Prescription Medication",
-      storeLocation: "456 Health St, Dublin",
-      storeName: "City Pharmacy",
-      currency: "EUR",
-      date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-      validUptoDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: `mock-${Date.now()}-3`,
-      uid: getUserId() || "mock-user",
-      category: "Personal",
-      price: 89.99,
-      productName: "Clothing",
-      storeLocation: "789 Shopping Blvd, Dublin",
-      storeName: "Fashion Store",
-      currency: "EUR",
-      date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ],
 }
 

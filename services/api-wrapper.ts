@@ -1,4 +1,3 @@
-// API wrapper for authentication services
 import { createErrorMessage, safeParseJSON } from "@/utils/api-helpers"
 import { logNetworkError } from "@/utils/network-debug"
 
@@ -952,4 +951,3 @@ function getMockReceipts(): Receipt[] {
     },
   ]
 }
-

@@ -51,6 +51,13 @@ export default function LoginPage() {
         if (result.token) {
           localStorage.setItem("authToken", result.token);
           sessionStorage.setItem("authToken", result.token);
+          
+          // Store refresh token if available
+          if (result.refreshToken) {
+            localStorage.setItem("refreshToken", result.refreshToken);
+            sessionStorage.setItem("refreshToken", result.refreshToken);
+            console.log("Refresh token saved in login page");
+          }
 
           // Store user data if available
           if (result.user) {

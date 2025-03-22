@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import {
   Settings,
   Search,
@@ -14,14 +14,14 @@ import {
   RefreshCw,
   Wifi,
   WifiOff,
-} from "lucide-react"
-import Image from "next/image"
-import { useRouter } from "next/navigation"
-import AddReceiptDialog from "@/components/add-receipt-dialog"
-import { getReceiptsByUserId, deleteReceipt, type Receipt } from "@/services/receipt-service"
-import { useToast } from "@/components/ui/use-toast"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+  X,
+} from "lucide-react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { getReceiptsByUserId, deleteReceipt, type Receipt } from "@/services/receipt-service";
+import { useToast } from "@/components/ui/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,11 +31,11 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
-import { refreshAuthTokenIfNeeded } from "@/utils/auth-helpers"
-// import { checkBrowserCapabilities } from "@/utils/network-debug"
+} from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { refreshAuthTokenIfNeeded } from "@/utils/auth-helpers";
+import AddReceiptDialog from "@/components/add-receipt-dialog";
 
 const categories = [
   {
@@ -125,68 +125,65 @@ const categories = [
       </svg>
     ),
   },
-]
+];
 
 export default function DashboardPage() {
-  const [isAddReceiptOpen, setIsAddReceiptOpen] = useState(false)
-  const [activeCategory, setActiveCategory] = useState("all")
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [receipts, setReceipts] = useState<Receipt[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const [receiptToDelete, setReceiptToDelete] = useState<string | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [sortBy, setSortBy] = useState("date")
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [isOnline, setIsOnline] = useState(true)
-  const { toast } = useToast()
-  const router = useRouter()
+  const [showReceiptForm, setShowReceiptForm] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [receiptToDelete, setReceiptToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [sortBy, setSortBy] = useState("date");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const { toast } = useToast();
+  const router = useRouter();
 
   // Check authentication
   useEffect(() => {
     async function verifyAuth() {
       try {
-        const isValid = await refreshAuthTokenIfNeeded()
+        const isValid = await refreshAuthTokenIfNeeded();
         if (!isValid) {
-          router.push("/login")
+          router.push("/login");
         }
       } catch (error) {
-        console.error("Auth error:", error)
-        router.push("/login")
+        console.error("Auth error:", error);
+        router.push("/login");
       }
     }
 
-    verifyAuth()
-  }, [router])
+    verifyAuth();
+  }, [router]);
 
   // Check online status
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true)
-    const handleOffline = () => setIsOnline(false)
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
     // Set initial status
-    setIsOnline(navigator.onLine)
+    setIsOnline(navigator.onLine);
 
     // Add event listeners
-    window.addEventListener("online", handleOnline)
-    window.addEventListener("offline", handleOffline)
-
-    // Check browser capabilities
-    // checkBrowserCapabilities()
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     return () => {
-      window.removeEventListener("online", handleOnline)
-      window.removeEventListener("offline", handleOffline)
-    }
-  }, [])
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // Fetch receipts
   const fetchReceipts = async () => {
     try {
-      setIsLoading(true)
-      setError(null)
+      setIsLoading(true);
+      setError(null);
 
       // Show offline toast if not online
       if (!navigator.onLine) {
@@ -194,96 +191,96 @@ export default function DashboardPage() {
           title: "You're offline",
           description: "Showing cached receipts. Some features may be limited.",
           variant: "destructive",
-        })
+        });
       }
 
-      const data = await getReceiptsByUserId()
-      setReceipts(data)
-      console.log("Fetched receipts:", data)
+      const data = await getReceiptsByUserId();
+      setReceipts(data);
+      console.log("Fetched receipts:", data);
     } catch (error) {
-      console.error("Error fetching receipts:", error)
-      setError(error instanceof Error ? error.message : "Failed to load receipts. Please try again.")
+      console.error("Error fetching receipts:", error);
+      setError(error instanceof Error ? error.message : "Failed to load receipts. Please try again.");
     } finally {
-      setIsLoading(false)
-      setIsLoaded(true)
-      setIsRefreshing(false)
+      setIsLoading(false);
+      setIsLoaded(true);
+      setIsRefreshing(false);
     }
-  }
+  };
 
   // Initial load
   useEffect(() => {
-    fetchReceipts()
-  }, [])
+    fetchReceipts();
+  }, []);
 
   // Handle refresh
   const handleRefresh = () => {
-    setIsRefreshing(true)
-    fetchReceipts()
-  }
+    setIsRefreshing(true);
+    fetchReceipts();
+  };
 
   // Handle delete receipt
   const handleDeleteReceipt = async () => {
-    if (!receiptToDelete) return
+    if (!receiptToDelete) return;
 
     try {
-      setIsDeleting(true)
-      await deleteReceipt(receiptToDelete)
+      setIsDeleting(true);
+      await deleteReceipt(receiptToDelete);
 
       // Update local state
-      setReceipts(receipts.filter((receipt) => receipt.id !== receiptToDelete))
+      setReceipts(receipts.filter((receipt) => receipt.id !== receiptToDelete));
 
       toast({
         title: "Receipt Deleted",
         description: "The receipt has been successfully deleted.",
-      })
+      });
     } catch (error) {
-      console.error("Error deleting receipt:", error)
+      console.error("Error deleting receipt:", error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to delete receipt. Please try again.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsDeleting(false)
-      setDeleteConfirmOpen(false)
-      setReceiptToDelete(null)
+      setIsDeleting(false);
+      setDeleteConfirmOpen(false);
+      setReceiptToDelete(null);
     }
-  }
+  };
 
   // Confirm delete
   const confirmDelete = (id: string) => {
-    setReceiptToDelete(id)
-    setDeleteConfirmOpen(true)
-  }
+    setReceiptToDelete(id);
+    setDeleteConfirmOpen(true);
+  };
 
   // Filter and sort receipts
   const filteredReceipts = receipts
     .filter((receipt) => {
       // Category filter
       if (activeCategory !== "all" && receipt.category?.toLowerCase() !== activeCategory.toLowerCase()) {
-        return false
+        return false;
       }
 
       // Search filter
       if (searchTerm) {
-        const search = searchTerm.toLowerCase()
+        const search = searchTerm.toLowerCase();
         return (
           receipt.storeName?.toLowerCase().includes(search) ||
           receipt.productName?.toLowerCase().includes(search) ||
           receipt.storeLocation?.toLowerCase().includes(search)
-        )
+        );
       }
 
-      return true
+      return true;
     })
     .sort((a, b) => {
       if (sortBy === "date") {
-        return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
+        return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
       } else if (sortBy === "price") {
-        return (b.price || 0) - (a.price || 0)
+        return (b.price || 0) - (a.price || 0);
       }
-      return 0
-    })
+      return 0;
+    });
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -294,7 +291,7 @@ export default function DashboardPage() {
         staggerChildren: 0.1,
       },
     },
-  }
+  };
 
   const itemVariants = {
     hidden: { y: 20, opacity: 0 },
@@ -303,39 +300,39 @@ export default function DashboardPage() {
       opacity: 1,
       transition: { type: "spring", stiffness: 300, damping: 24 },
     },
-  }
+  };
 
   // Format date
   const formatDate = (dateString: string) => {
-    if (!dateString) return "N/A"
+    if (!dateString) return "N/A";
     try {
-      const date = new Date(dateString)
-      return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
     } catch (error) {
-      console.error("Error formatting date:", error)
-      return "Invalid Date"
+      console.error("Error formatting date:", error);
+      return "Invalid Date";
     }
-  }
+  };
 
   // Get category emoji
   const getCategoryEmoji = (category = "") => {
     switch (category.toLowerCase()) {
       case "medical":
-        return "💊"
+        return "💊";
       case "electrical":
-        return "🔌"
+        return "🔌";
       case "business":
-        return "💼"
+        return "💼";
       case "personal":
-        return "🛒"
+        return "🛒";
       default:
-        return "📝"
+        return "📝";
     }
-  }
+  };
 
   // Calculate total value of filtered receipts
-  const totalValue = filteredReceipts.reduce((sum, receipt) => sum + (receipt.price || 0), 0).toFixed(2)
-  const currency = filteredReceipts.length > 0 ? filteredReceipts[0]?.currency || "€" : "€"
+  const totalValue = filteredReceipts.reduce((sum, receipt) => sum + (receipt.price || 0), 0).toFixed(2);
+  const currency = filteredReceipts.length > 0 ? filteredReceipts[0]?.currency || "€" : "€";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -415,7 +412,7 @@ export default function DashboardPage() {
           <Alert variant="warning" className="mb-6 bg-amber-50 border-amber-200">
             <WifiOff className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-800">
-              You're currentlyy offline. Some features may be limited.
+              You're currently offline. Some features may be limited.
             </AlertDescription>
           </Alert>
         )}
@@ -492,7 +489,7 @@ export default function DashboardPage() {
                 : "Add your first receipt to get started"}
             </p>
             <button
-              onClick={() => setIsAddReceiptOpen(true)}
+              onClick={() => setShowReceiptForm(true)}
               className="inline-flex items-center px-4 py-2 bg-[#1B9D65] text-white rounded-md hover:bg-[#1B9D65]/90"
             >
               <Plus className="w-5 h-5 mr-2" />
@@ -595,17 +592,34 @@ export default function DashboardPage() {
           transition={{ delay: 0.5, type: "spring", stiffness: 300, damping: 15 }}
           whileHover={{ scale: 1.1, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
           whileTap={{ scale: 0.9 }}
-          onClick={() => setIsAddReceiptOpen(true)}
+          onClick={() => setShowReceiptForm(true)}
           className="fixed bottom-6 right-6 w-14 h-14 bg-[#1B9D65] text-white rounded-full flex items-center justify-center shadow-lg"
         >
           <Plus className="w-6 h-6" />
         </motion.button>
 
-        <AddReceiptDialog
-          isOpen={isAddReceiptOpen}
-          onClose={() => setIsAddReceiptOpen(false)}
-          onSuccess={fetchReceipts}
-        />
+        {/* Receipt Upload Form Modal */}
+        {showReceiptForm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="p-4 flex justify-between items-center border-b">
+                <h2 className="text-lg font-semibold">Add New Receipt</h2>
+                <button
+                  onClick={() => setShowReceiptForm(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-4">
+                <AddReceiptDialog isOpen={showReceiptForm} onClose={() => setShowReceiptForm(false)} onSuccess={() => {
+                  setShowReceiptForm(false);
+                  fetchReceipts();
+                }}/>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
@@ -637,6 +651,5 @@ export default function DashboardPage() {
         </AlertDialog>
       </motion.main>
     </div>
-  )
+  );
 }
-

@@ -7,8 +7,8 @@ export async function getUserId(): Promise<string | null> {
       // In a real app, this would come from your auth provider
       const userId = localStorage.getItem("userId")
   
-      // For demo purposes, return a mock ID if none exists
-      return userId || "mock-user-123"
+      // Return empty string if no user ID exists
+      return userId || ""
     } catch (error) {
       console.error("Error getting user ID:", error)
       return null

@@ -158,15 +158,7 @@ export async function addReceipt(receipt: Omit<Receipt, "uid">): Promise<Receipt
 
     console.log("Adding receipt:", JSON.stringify(receiptWithUid, null, 2))
 
-    // If using mock API, log the request and return a mock response
-    if (useMockApi) {
-      console.log("MOCK API: Adding receipt", receiptWithUid)
-      return {
-        ...receiptWithUid,
-        id: `mock-${Date.now()}`,
-        addedDate: new Date().toISOString(),
-      } as Receipt
-    }
+
 
     const response = await authenticatedFetch(`${API_BASE_URL}/receipt/add`, {
       method: "POST",
@@ -210,35 +202,7 @@ export async function getReceiptsByUserId(): Promise<Receipt[]> {
       throw new Error("User ID not found")
     }
 
-    // If using mock API, return mock data
-    if (useMockApi) {
-      console.log("MOCK API: Getting receipts for user", userData.uid)
-      return [
-        {
-          id: "mock-1",
-          uid: userData.uid,
-          category: "business",
-          price: 125.5,
-          productName: "Office Supplies",
-          storeName: "Office Depot",
-          storeLocation: "123 Main St",
-          currency: "USD",
-          date: new Date().toISOString(),
-          addedDate: new Date().toISOString(),
-        },
-        {
-          id: "mock-2",
-          uid: userData.uid,
-          category: "medical",
-          price: 75.2,
-          productName: "Prescription",
-          storeName: "City Pharmacy",
-          currency: "USD",
-          date: new Date(Date.now() - 86400000).toISOString(), // Yesterday
-          addedDate: new Date(Date.now() - 86400000).toISOString(),
-        },
-      ]
-    }
+
 
     console.log("Fetching receipts for user:", userData.uid)
 
@@ -273,22 +237,7 @@ export async function getReceiptById(id: string): Promise<Receipt | null> {
       throw new Error("Authentication required")
     }
 
-    // If using mock API, return mock data
-    if (useMockApi) {
-      console.log("MOCK API: Getting receipt by ID", id)
-      return {
-        id: id,
-        uid: "mock-user",
-        category: "business",
-        price: 125.5,
-        productName: "Office Supplies",
-        storeName: "Office Depot",
-        storeLocation: "123 Main St",
-        currency: "USD",
-        date: new Date().toISOString(),
-        addedDate: new Date().toISOString(),
-      }
-    }
+
 
     const response = await authenticatedFetch(`${API_BASE_URL}/receipt/${id}`, {
       method: "GET",
@@ -320,15 +269,7 @@ export async function updateReceipt(id: string, receipt: Partial<Receipt>): Prom
       throw new Error("Authentication required")
     }
 
-    // If using mock API, log the request and return a mock response
-    if (useMockApi) {
-      console.log("MOCK API: Updating receipt", id, receipt)
-      return {
-        ...receipt,
-        id: id,
-        updatedDate: new Date().toISOString(),
-      } as Receipt
-    }
+
 
     const response = await authenticatedFetch(`${API_BASE_URL}/receipt/${id}`, {
       method: "PUT",
@@ -361,11 +302,7 @@ export async function deleteReceipt(id: string): Promise<boolean> {
       throw new Error("Authentication required")
     }
 
-    // If using mock API, log the request and return success
-    if (useMockApi) {
-      console.log("MOCK API: Deleting receipt", id)
-      return true
-    }
+
 
     const response = await authenticatedFetch(`${API_BASE_URL}/receipt/delete?id=${id}`, {
       method: "DELETE",
@@ -397,11 +334,7 @@ export async function uploadReceiptImage(file: File): Promise<string> {
     // Convert file to base64
     const base64Data = await fileToBase64(file)
 
-    // If using mock API, log the request and return a mock image ID
-    if (useMockApi) {
-      console.log("MOCK API: Uploading receipt image", file.name)
-      return `mock-image-${Date.now()}`
-    }
+
 
     // Create payload with base64 data
     const payload = {
@@ -443,12 +376,7 @@ export async function getReceiptImage(imageReceiptId: string): Promise<string> {
       throw new Error("Authentication required")
     }
 
-    // If using mock API, return a mock base64 image
-    if (useMockApi) {
-      console.log("MOCK API: Getting receipt image", imageReceiptId)
-      // Return a simple 1x1 transparent pixel as base64
-      return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
-    }
+
 
     console.log("Fetching image:", imageReceiptId)
 
