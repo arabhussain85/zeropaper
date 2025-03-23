@@ -148,25 +148,42 @@ export function isAuthTokenValid() {
   if (typeof window === "undefined") return false;
 
   const token = localStorage.getItem("authToken") || sessionStorage.getItem("authToken");
-  if (!token) return false;
+  if (!token) {
+    console.log("No auth token found");
+    return false;
+  }
 
   // Check if token is a JWT and parse it
   try {
     // Simple JWT structure check
     if (token.split(".").length !== 3) {
+      console.log("Token is not a valid JWT format");
       return false;
     }
 
     // Try to decode the middle part (payload)
     const payload = JSON.parse(atob(token.split(".")[1]));
+    console.log("Token payload decoded successfully");
 
     // Check if token has expiration and is not expired
     if (payload.exp) {
       const expirationTime = payload.exp * 1000; // Convert to milliseconds
-      return Date.now() < expirationTime;
+      const currentTime = Date.now();
+      const isValid = currentTime < expirationTime;
+      
+      // Log expiration details for debugging
+      const timeRemaining = Math.floor((expirationTime - currentTime) / 1000 / 60); // minutes
+      if (isValid) {
+        console.log(`Token is valid. Expires in approximately ${timeRemaining} minutes`);
+      } else {
+        console.log(`Token has expired. Expired ${-timeRemaining} minutes ago`);
+      }
+      
+      return isValid;
     }
 
-    // If no expiration in token, assume it's valid
+    // If no expiration in token, assume it's valid but log a warning
+    console.log("Warning: Token has no expiration date");
     return true;
   } catch (error) {
     console.error("Error checking token validity:", error);
