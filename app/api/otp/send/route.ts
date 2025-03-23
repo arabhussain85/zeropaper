@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-const BASE_URL = "https://services.stage.zeropaper.online/api/zpu"
+const BASE_URL = "http://198.71.58.230:8787/api/zpu"
 
 export async function POST(request: Request) {
   try {
@@ -9,12 +9,13 @@ export async function POST(request: Request) {
 
     console.log("Sending OTP to:", email)
 
-    const response = await fetch(`${BASE_URL}/otp/email/send`, {
+    const encodedEmail = encodeURIComponent(email)
+    const response = await fetch(`${BASE_URL}/otp/email/send?email=${encodedEmail}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ email }),
+      // No need to send email in body as it's now in the URL query parameter
       // Add these options to help with potential issues
       cache: "no-store",
       next: { revalidate: 0 },

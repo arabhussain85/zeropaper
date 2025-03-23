@@ -100,14 +100,10 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
   // Add authorization header
   const authOptions = {
     ...options,
-    mode: 'cors',
-    credentials: 'include',
     headers: {
       ...options.headers,
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'Access-Control-Allow-Origin': '*',
-    },
+      'Content-Type': 'application/json'    },
   }
 
   // Make the request
@@ -209,10 +205,13 @@ export async function getReceiptsByUserId(): Promise<Receipt[]> {
 
     console.log("Fetching receipts for user:", userData.uid)
 
-    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/get_by_user_id?uid=${userData.uid}`, {
+    const response = await authenticatedFetch(`http://198.71.58.230:8787/api/zpu/receipts/get_by_user_id?storedUserId=${userData.uid}`, {
       method: "GET",
+
       headers: {
-        Accept: "application/json",
+        
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
       },
       cache: "no-store",
     })

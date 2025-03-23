@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-const API_BASE_URL = process.env.API_BASE_URL || "https://services.stage.zeropaper.online/api/zpu"
+const API_BASE_URL = process.env.API_BASE_URL || "http://198.71.58.230:8787/api/zpu"
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Authorization header is required" }, { status: 401 })
     }
 
-    console.log(`Proxying GET request to ${API_BASE_URL}/receipt/get_by_user_id?uid=${uid}`)
+    console.log(`Proxying GET request to ${API_BASE_URL}/receipt/get_by_user_id?storedUserId=${uid}`)
 
     // Forward the request to the actual API
     const response = await fetch(`${API_BASE_URL}/receipt/get_by_user_id?uid=${uid}`, {

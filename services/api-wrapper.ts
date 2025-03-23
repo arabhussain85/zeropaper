@@ -2,7 +2,7 @@ import { createErrorMessage, safeParseJSON } from "@/utils/api-helpers"
 import { logNetworkError } from "@/utils/network-debug"
 
 // Base URL for API - use environment variable if available
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://services.stage.zeropaper.online/api/zpu"
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://198.71.58.230:8787/api/zpu"
 
 // Flag to enable mock data when API is unavailable
 const USE_MOCK_DATA = process.env.NEXT_PUBLIC_USE_MOCK_API === "true" || false
@@ -18,15 +18,14 @@ export async function sendOTP(email: string): Promise<{ success: boolean; messag
     }
 
     // Use our server-side API route to avoid CORS issues
-    const response = await fetch("/api/auth", {
+    const encodedEmail = encodeURIComponent(email)
+    const response = await fetch(`http://198.71.58.230:8787/api/zpu/otp/email/send?email=${encodedEmail}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${getAuthToken()}`
       },
-      body: JSON.stringify({
-        action: "sendOTP",
-        email,
-      }),
+      // No need to send email in body as it's now in the URL query parameter
     })
 
     // First check if the response is OK
@@ -119,10 +118,11 @@ export async function registerUser(userData: {
     })
 
     // Use our server-side API route to avoid CORS issues
-    const response = await fetch("/api/auth", {
+    const response = await fetch("http://198.71.58.230:8787/api/zpu/users/register", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${getAuthToken()}`
       },
       body: JSON.stringify(requestData),
     })
@@ -227,6 +227,7 @@ export async function loginUser(credentials: LoginCredentials): Promise<LoginRes
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${getAuthToken()}`
       },
       body: JSON.stringify({
         action: "login",
@@ -359,6 +360,7 @@ export async function resetPassword(resetData: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${getAuthToken()}`
       },
       body: JSON.stringify({
         action: "resetPassword",
