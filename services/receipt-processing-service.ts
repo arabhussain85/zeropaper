@@ -2,7 +2,7 @@ import { getAuthToken, getUserData, refreshAuthTokenIfNeeded } from "@/utils/aut
 import { Receipt, NewReceipt } from "@/types/receipt"
 
 // Use environment variable for API base URL if available, otherwise use the default
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://services.stage.zeropaper.online/api/zpu"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://198.71.58.230:8787/api/zpu"
 
 // Function to process a receipt with form data
 export async function processReceiptWithFormData(formData: FormData): Promise<Receipt> {

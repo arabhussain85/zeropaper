@@ -19,12 +19,9 @@ export async function sendOTP(email: string): Promise<{ success: boolean; messag
 
     // Use our server-side API route to avoid CORS issues
     const encodedEmail = encodeURIComponent(email)
-    const response = await fetch(`http://198.71.58.230:8787/api/zpu/otp/email/send?email=${encodedEmail}`, {
+    const response = await fetch(`http://198.71.58.230:8787/api/zpu/otp/email/send?email=${email}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${getAuthToken()}`
-      },
+
       // No need to send email in body as it's now in the URL query parameter
     })
 
@@ -122,7 +119,6 @@ export async function registerUser(userData: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${getAuthToken()}`
       },
       body: JSON.stringify(requestData),
     })
@@ -227,7 +223,7 @@ export async function loginUser(credentials: LoginCredentials): Promise<LoginRes
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${getAuthToken()}`
+        Authorization: `Bearer ${getAuthToken()}`,
       },
       body: JSON.stringify({
         action: "login",
@@ -360,7 +356,7 @@ export async function resetPassword(resetData: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${getAuthToken()}`
+        Authorization: `Bearer ${getAuthToken()}`,
       },
       body: JSON.stringify({
         action: "resetPassword",
@@ -594,14 +590,14 @@ export async function addReceipt(receiptData: Omit<Receipt, "id">, imageBase64?:
       const tokenPreview = token.substring(0, 10) + "..." + token.substring(token.length - 5)
       console.log(`Using auth token: ${tokenPreview}`)
 
-     const response = await fetch('/api/receipts/add', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(receiptData)
-})
+      const response = await fetch("/api/receipts/add", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(receiptData),
+      })
       if (!response.ok) {
         const errorText = await response.text()
         console.error(`API responded with status: ${response.status}`, errorText)
@@ -682,7 +678,6 @@ export async function addReceipt(receiptData: Omit<Receipt, "id">, imageBase64?:
   }
 }
 
-// Function to delete a receipt
 export async function deleteReceipt(receiptId: string): Promise<boolean> {
   try {
     const token = getAuthToken()
@@ -697,52 +692,33 @@ export async function deleteReceipt(receiptId: string): Promise<boolean> {
       return true
     }
 
-    // First try using our API proxy to avoid CORS
-    try {
-      const response = await fetch(`/api/receipts/delete?id=${receiptId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+    // Use our server-side API route to avoid CORS issues
+    const response = await fetch(`http://198.71.58.230:8787/api/zpu/receipts/delete?id=${receiptId}`, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"  // Add this to ensure proper content type
+      },
+    })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`API responded with status: ${response.status}`, errorText)
-        throw new Error(`API responded with status: ${response.status}`)
-      }
-
-      console.log("Receipt deleted successfully")
-      return true
-    } catch (proxyError) {
-      console.error("Error deleting receipt through proxy:", proxyError)
-
-      // Try direct API call as fallback
-      console.log("Trying direct API call as fallback...")
-      const directResponse = await fetch(`${BASE_URL}/receipt/delete?id=${receiptId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      })
-
-      if (!directResponse.ok) {
-        const errorText = await directResponse.text()
-        console.error(`Direct API call failed with status: ${directResponse.status}`, errorText)
-        throw new Error(`Direct API call failed with status: ${directResponse.status}`)
-      }
-
-      console.log("Receipt deleted successfully via direct API")
-      return true
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      console.error(`API responded with status: ${response.status}`, errorData)
+      throw new Error(`API error: ${response.status}. ${errorData.error || ""}`)
     }
+
+    console.log("Receipt deleted successfully")
+    return true
   } catch (error) {
-    console.error("All receipt deletion methods failed:", error)
+    console.error("Error deleting receipt:", error)
     logNetworkError(error, "deleteReceipt")
 
-    // Return success anyway as a fallback
-    console.log("Simulating successful deletion")
-    return true
+    if (USE_MOCK_DATA) {
+      console.log("Using mock data for deleteReceipt fallback")
+      return true
+    }
+
+    throw error
   }
 }
 
@@ -895,6 +871,54 @@ export async function getReceiptImage(imageReceiptId: string): Promise<string> {
   }
 }
 
+// Add a new function to get receipt image by receipt ID
+export async function getReceiptImageByReceiptId(receiptId: string): Promise<string> {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      throw new Error("Authentication token not found. Please log in again.")
+    }
+
+    console.log("Fetching receipt image for receipt ID:", receiptId)
+
+    if (USE_MOCK_DATA) {
+      console.log("Using mock data for getReceiptImageByReceiptId")
+      // Return a simple 1x1 transparent pixel as base64
+      return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    }
+
+    // Use our server-side API route to avoid CORS issues
+    const response = await fetch(`/api/receipts/image-by-receipt?receiptId=${receiptId}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      console.error(`API responded with status: ${response.status}`, errorData)
+      throw new Error(`API error: ${response.status}. ${errorData.error || ""}`)
+    }
+
+    const data = await response.json()
+    console.log("Image fetched successfully by receipt ID")
+    return data.imageBase64 || ""
+  } catch (error) {
+    console.error("Error fetching image by receipt ID:", error)
+    logNetworkError(error, "getReceiptImageByReceiptId")
+
+    // Return a mock image as last resort
+    if (USE_MOCK_DATA) {
+      console.log("Using mock image data")
+      // Return a simple 1x1 transparent pixel as base64
+      return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    }
+
+    throw error
+  }
+}
+
 // Function to convert file to base64
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -953,3 +977,4 @@ function getMockReceipts(): Receipt[] {
     },
   ]
 }
+

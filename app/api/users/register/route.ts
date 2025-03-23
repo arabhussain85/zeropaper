@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-const BASE_URL = "http://198.71.58.230:8787/api/zpu"
+const BASE_URL = "https://zeropaper.bbsuog.com/api/zpu"
 
 export async function POST(request: Request) {
   try {

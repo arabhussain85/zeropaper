@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Search, Filter, Plus, MapPin, MoreVertical, Receipt, ImageIcon } from "lucide-react"
+import { Loader2, Search, Filter, Plus, MapPin, MoreVertical, Receipt, ImageIcon, Check } from "lucide-react"
 import { getReceipts, getReceiptImage, type Receipt as ReceiptType } from "@/services/receipt-service"
 import { formatDate } from "@/utils/date-helpers"
+import ReceiptDetailModal from "./receipt-detail-modal"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function ReceiptsList() {
   const [receipts, setReceipts] = useState<ReceiptType[]>([])
@@ -19,7 +21,10 @@ export default function ReceiptsList() {
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [sortBy, setSortBy] = useState("date")
   const [receiptImages, setReceiptImages] = useState<Record<string, string>>({})
+  const [selectedReceipt, setSelectedReceipt] = useState<ReceiptType | null>(null)
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const router = useRouter()
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchReceipts()
@@ -108,6 +113,24 @@ export default function ReceiptsList() {
 
   const handleAddReceipt = () => {
     router.push("/receipts/add")
+  }
+
+  const handleOpenReceiptDetail = (receipt: ReceiptType) => {
+    setSelectedReceipt(receipt)
+    setIsDetailModalOpen(true)
+  }
+
+  const handleCloseReceiptDetail = () => {
+    setIsDetailModalOpen(false)
+    setSelectedReceipt(null)
+  }
+
+  const handleDeleteReceipt = (id: string) => {
+    setReceipts(receipts.filter(receipt => receipt.id !== id))
+    toast({
+      title: "Receipt Deleted",
+      description: "The receipt has been successfully deleted.",
+    })
   }
 
   const getCategoryEmoji = (category: string) => {
@@ -272,8 +295,9 @@ export default function ReceiptsList() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ delay: index * 0.05 }}
-                className="bg-white rounded-xl p-4 shadow-sm"
+                className="bg-white rounded-xl p-4 shadow-sm cursor-pointer"
                 whileHover={{ scale: 1.01, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
+                onClick={() => handleOpenReceiptDetail(receipt)}
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-3">
@@ -363,6 +387,15 @@ export default function ReceiptsList() {
       >
         <Plus className="w-6 h-6" />
       </motion.button>
+
+      {/* Receipt Detail Modal */}
+      <ReceiptDetailModal
+        receipt={selectedReceipt}
+        receiptImage={selectedReceipt?.imageReceiptId ? receiptImages[selectedReceipt.imageReceiptId] : null}
+        isOpen={isDetailModalOpen}
+        onClose={handleCloseReceiptDetail}
+        onDelete={handleDeleteReceipt}
+      />
     </div>
   )
 }

@@ -47,40 +47,44 @@ export default function LoginPage() {
       console.log("Login result:", result); // Debug the response
 
       if (result.success) {
-        // Store token in both localStorage and sessionStorage for redundancy
+        // Use the auth helper to store token and user data
         if (result.token) {
-          localStorage.setItem("authToken", result.token);
-          sessionStorage.setItem("authToken", result.token);
+          // Remember me is hardcoded to true for now - could be added as a checkbox option later
+          const rememberMe = true;
+          const loginData = {
+            refreshToken: result.refreshToken,
+            user: result.user
+          };
           
-          // Store refresh token if available
-          if (result.refreshToken) {
-            localStorage.setItem("refreshToken", result.refreshToken);
-            sessionStorage.setItem("refreshToken", result.refreshToken);
-            console.log("Refresh token saved in login page");
-          }
-
-          // Store user data if available
-          if (result.user) {
-            localStorage.setItem("userData", JSON.stringify(result.user));
-            console.log("User data saved in login page:", result.user);
+          // Use the auth helper to set tokens and user data
+          const tokenSet = setAuthToken(result.token, rememberMe, loginData);
+          
+          if (tokenSet) {
+            setDebugInfo(`Login successful. Token received and stored. Validating token before redirect...`);
+            
+            // Validate the token is properly stored and valid
+            const token = localStorage.getItem("authToken") || sessionStorage.getItem("authToken");
+            if (token) {
+              toast({
+                title: "Success!",
+                description: "You have successfully logged in.",
+              });
+              
+              // Use a direct window location change for more reliable redirection
+              setTimeout(() => {
+                window.location.href = "/dashboard";
+              }, 1000);
+            } else {
+              // If token is missing after setting, show error
+              setError("Authentication failed. Token could not be stored.");
+            }
           } else {
-            console.error("No user data received from login");
+            setError("Failed to store authentication token.");
           }
-
-          setDebugInfo(`Login successful. Token received and stored. Redirecting to dashboard...`);
         } else {
           setDebugInfo(`Login successful but no token received. This is unusual.`);
+          setError("No authentication token received from server.");
         }
-
-        toast({
-          title: "Success!",
-          description: "You have successfully logged in.",
-        });
-
-        // Use a direct window location change for more reliable redirection
-        setTimeout(() => {
-          window.location.href = "/dashboard";
-        }, 1000);
       } else {
         setError(result.message || "Login failed. Please check your credentials.");
         setDebugInfo("Login failed: " + result.message);

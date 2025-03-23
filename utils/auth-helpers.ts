@@ -23,6 +23,29 @@ export function useAuth(redirectTo = "/login") {
 
       // Use window.location for more reliable redirection
       window.location.href = redirectTo;
+      return;
+    }
+
+    // Validate token
+    if (!isAuthTokenValid()) {
+      // Try to refresh the token
+      refreshAuthTokenIfNeeded().then(refreshed => {
+        if (!refreshed) {
+          toast({
+            title: "Session Expired",
+            description: "Your session has expired. Please log in again.",
+            variant: "destructive",
+          });
+          
+          // Clear tokens and redirect
+          localStorage.removeItem("authToken");
+          sessionStorage.removeItem("authToken");
+          localStorage.removeItem("refreshToken");
+          sessionStorage.removeItem("refreshToken");
+          
+          window.location.href = redirectTo;
+        }
+      });
     }
   }, [redirectTo, router, toast]);
 }

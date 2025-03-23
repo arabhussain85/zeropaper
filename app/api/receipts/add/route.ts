@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
-const API_BASE_URL = process.env.API_BASE_URL || "https://services.stage.zeropaper.online/api/zpu";
+const API_BASE_URL = process.env.API_BASE_URL || "http://198.71.58.230:8787/api/zpu";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {

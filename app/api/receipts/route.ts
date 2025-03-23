@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-const API_BASE_URL = process.env.API_BASE_URL || "http://198.71.58.230:8787/api/zpu"
+const API_BASE_URL = process.env.API_BASE_URL || "https://zeropaper.bbsuog.com/api/zpu"
 
 export async function GET(request: NextRequest) {
   try {

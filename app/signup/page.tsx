@@ -165,9 +165,9 @@ export default function SignUpPage() {
           setDebugInfo(`Registration successful but no token received. Redirecting anyway...`)
         }
 
-        // Use a direct window location change for more reliable redirection
+        // Redirect to login page after successful registration
         setTimeout(() => {
-          window.location.href = "/dashboard"
+          window.location.href = "/login"
         }, 1500)
       } else {
         setError(result.message || "Registration failed. Please try again.")

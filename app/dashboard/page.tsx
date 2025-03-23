@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { getReceiptsByUserId, deleteReceipt, type Receipt } from "@/services/receipt-service";
+import { getReceiptsByUserId, deleteReceipt, getReceiptImage, type Receipt } from "@/services/receipt-service";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -36,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { refreshAuthTokenIfNeeded,getAuthToken } from "@/utils/auth-helpers";
 import AddReceiptDialog from "@/components/add-receipt-dialog";
+import ReceiptDetailModal from "@/components/receipt-detail-modal";
 
 
 
@@ -143,6 +144,9 @@ export default function DashboardPage() {
   const [sortBy, setSortBy] = useState("date");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [receiptImages, setReceiptImages] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const router = useRouter();
 
@@ -150,13 +154,29 @@ export default function DashboardPage() {
   useEffect(() => {
     async function verifyAuth() {
       try {
+        // First check if token exists
+        const token = getAuthToken();
+        if (!token) {
+          console.log("No auth token found, redirecting to login");
+          window.location.href = "/login";
+          return;
+        }
+        
+        // Then check if token is valid or can be refreshed
         const isValid = await refreshAuthTokenIfNeeded();
         if (!isValid) {
-          router.push("/login");
+          console.log("Token invalid and refresh failed, redirecting to login");
+          // Clear tokens
+          localStorage.removeItem("authToken");
+          sessionStorage.removeItem("authToken");
+          localStorage.removeItem("refreshToken");
+          sessionStorage.removeItem("refreshToken");
+          
+          window.location.href = "/login";
         }
       } catch (error) {
         console.error("Auth error:", error);
-        router.push("/login");
+        window.location.href = "/login";
       }
     }
 
@@ -199,6 +219,35 @@ export default function DashboardPage() {
       const data = await getReceiptsByUserId();
       setReceipts(data);
       console.log("Fetched receipts:", data);
+      
+      // Fetch images for receipts that have imageReceiptId
+      const imagePromises = data
+        .filter((receipt) => receipt.imageReceiptId)
+        .map(async (receipt) => {
+          try {
+            if (receipt.imageReceiptId) {
+              const imageBase64 = await getReceiptImage(receipt.imageReceiptId);
+              if (imageBase64) {
+                return { id: receipt.imageReceiptId, base64: imageBase64 };
+              }
+            }
+            return null;
+          } catch (error) {
+            console.error(`Error fetching image for receipt ${receipt.id}:`, error);
+            return null;
+          }
+        });
+
+      const images = await Promise.all(imagePromises);
+      const imageMap: Record<string, string> = {};
+
+      images.forEach((img) => {
+        if (img && img.id && img.base64) {
+          imageMap[img.id] = img.base64;
+        }
+      });
+
+      setReceiptImages(imageMap);
     } catch (error) {
       console.error("Error fetching receipts:", error);
       setError(error instanceof Error ? error.message : "Failed to load receipts. Please try again.");
@@ -253,6 +302,18 @@ export default function DashboardPage() {
   const confirmDelete = (id: string) => {
     setReceiptToDelete(id);
     setDeleteConfirmOpen(true);
+  };
+  
+  // Handle opening receipt detail modal
+  const handleOpenReceiptDetail = (receipt: Receipt) => {
+    setSelectedReceipt(receipt);
+    setIsDetailModalOpen(true);
+  };
+
+  // Handle closing receipt detail modal
+  const handleCloseReceiptDetail = () => {
+    setIsDetailModalOpen(false);
+    setSelectedReceipt(null);
   };
 
   // Filter and sort receipts
@@ -517,9 +578,10 @@ export default function DashboardPage() {
             <motion.div
               key={receipt.id || index}
               variants={itemVariants}
-              className="bg-white rounded-xl p-4 shadow-sm"
+              className="bg-white rounded-xl p-4 shadow-sm cursor-pointer"
               whileHover={{ scale: 1.01, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
               transition={{ delay: index * 0.1 }}
+              onClick={() => handleOpenReceiptDetail(receipt)}
             >
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
@@ -651,6 +713,21 @@ export default function DashboardPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Receipt Detail Modal */}
+        <ReceiptDetailModal
+          receipt={selectedReceipt}
+          receiptImage={selectedReceipt?.imageReceiptId ? receiptImages[selectedReceipt.imageReceiptId] : null}
+          isOpen={isDetailModalOpen}
+          onClose={handleCloseReceiptDetail}
+          onDelete={(id) => {
+            setReceipts(receipts.filter(receipt => receipt.id !== id));
+            toast({
+              title: "Receipt Deleted",
+              description: "The receipt has been successfully deleted.",
+            });
+          }}
+        />
       </motion.main>
     </div>
   );
