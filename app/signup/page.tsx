@@ -151,19 +151,12 @@ export default function SignUpPage() {
       if (result.success) {
         toast({
           title: "Registration Successful!",
-          description: "Your account has been created. Redirecting to dashboard...",
+          description: "Your account has been created. Redirecting to login page...",
         })
 
-        // Store the token if available
-        if (result.data?.token) {
-          // Store in both localStorage and sessionStorage for redundancy
-          localStorage.setItem("authToken", result.data.token)
-          sessionStorage.setItem("authToken", result.data.token)
-
-          setDebugInfo(`Token received and stored. Redirecting to dashboard...`)
-        } else {
-          setDebugInfo(`Registration successful but no token received. Redirecting anyway...`)
-        }
+        // We don't store the token after registration anymore
+        // Instead, we redirect to login page for proper authentication flow
+        setDebugInfo(`Registration successful. Redirecting to login page...`)
 
         // Redirect to login page after successful registration
         setTimeout(() => {
