@@ -2,7 +2,7 @@ import { createErrorMessage, safeParseJSON } from "@/utils/api-helpers"
 import { logNetworkError } from "@/utils/network-debug"
 
 // Base URL for API - use environment variable if available
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://198.71.58.230:8787/api/zpu"
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 
 // Flag to enable mock data when API is unavailable
 const USE_MOCK_DATA = process.env.NEXT_PUBLIC_USE_MOCK_API === "true" || false
@@ -19,7 +19,7 @@ export async function sendOTP(email: string): Promise<{ success: boolean; messag
 
     // Use our server-side API route to avoid CORS issues
     const encodedEmail = encodeURIComponent(email)
-    const response = await fetch(`http://198.71.58.230:8787/api/zpu/otp/email/send?email=${email}`, {
+    const response = await fetch(`${BASE_URL}/otp/email/send?email=${email}`, {
       method: "POST",
 
       // No need to send email in body as it's now in the URL query parameter
@@ -115,7 +115,7 @@ export async function registerUser(userData: {
     })
 
     // Use our server-side API route to avoid CORS issues
-    const response = await fetch("http://198.71.58.230:8787/api/zpu/users/register", {
+    const response = await fetch(`${BASE_URL}/users/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -464,7 +464,6 @@ export function getAuthToken(): string | null {
   return localStorage.getItem("authToken") || sessionStorage.getItem("authToken")
 }
 
-// Function to get receipts by user ID through our API proxy
 export async function getReceiptsByUserId(): Promise<Receipt[]> {
   try {
     const uid = getUserId()
@@ -488,28 +487,7 @@ export async function getReceiptsByUserId(): Promise<Receipt[]> {
 
     // First try using our API proxy to avoid CORS
     try {
-      const response = await fetch(`/api/receipts/get_by_user_id?uid=${uid}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`API responded with status: ${response.status}`, errorText)
-        throw new Error(`API responded with status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log("Receipts fetched successfully:", data)
-      return Array.isArray(data) ? data : []
-    } catch (proxyError) {
-      console.error("Error fetching receipts through proxy:", proxyError)
-
-      // Try direct API call as fallback
-      console.log("Trying direct API call as fallback...")
+     
       const directResponse = await fetch(`${BASE_URL}/receipt/get_by_user_id?uid=${uid}`, {
         method: "GET",
         headers: {
@@ -527,6 +505,9 @@ export async function getReceiptsByUserId(): Promise<Receipt[]> {
       const directData = await directResponse.json()
       console.log("Receipts fetched successfully via direct API:", directData)
       return Array.isArray(directData) ? directData : []
+    } catch (error) {
+      console.error("Direct API call failed:", error)
+      throw error; // Rethrow to be caught by outer catch
     }
   } catch (error) {
     console.error("All receipt fetching methods failed:", error)
@@ -537,7 +518,6 @@ export async function getReceiptsByUserId(): Promise<Receipt[]> {
     return getMockReceipts()
   }
 }
-
 // Function to prepare an image for receipt upload (converts to base64 only)
 export async function prepareReceiptImage(file: File): Promise<string> {
   try {
@@ -693,7 +673,7 @@ export async function deleteReceipt(receiptId: string): Promise<boolean> {
     }
 
     // Use our server-side API route to avoid CORS issues
-    const response = await fetch(`http://198.71.58.230:8787/api/zpu/receipts/delete?id=${receiptId}`, {
+    const response = await fetch(`${BASE_URL}/receipts/delete?id=${receiptId}`, {
       method: "DELETE",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -722,87 +702,6 @@ export async function deleteReceipt(receiptId: string): Promise<boolean> {
   }
 }
 
-// Function to upload receipt image
-// export async function uploadReceiptImage(file: File): Promise<string> {
-//   try {
-//     const token = getAuthToken()
-//     if (!token) {
-//       throw new Error("Authentication token not found. Please log in again.")
-//     }
-
-//     console.log("Uploading receipt image:", file.name, file.type, "size:", file.size)
-
-//     if (USE_MOCK_DATA) {
-//       console.log("Using mock data for uploadReceiptImage")
-//       return `mock-image-${Date.now()}`
-//     }
-
-//     // Convert file to base64
-//     const base64Data = await fileToBase64(file)
-
-//     // Create payload with base64 data
-//     const payload = {
-//       imageBase64: base64Data,
-//       fileName: file.name,
-//       contentType: file.type,
-//     }
-
-//     // First try using our API proxy to avoid CORS
-//     try {
-//       const response = await fetch(`/api/receipts/upload`, {
-//         method: "POST",
-//         headers: {
-//           "Content-Type": "application/json",
-//           Authorization: `Bearer ${token}`,
-//         },
-//         body: JSON.stringify(payload),
-//       })
-
-//       if (!response.ok) {
-//         const errorText = await response.text()
-//         console.error(`API responded with status: ${response.status}`, errorText)
-//         throw new Error(`API responded with status: ${response.status}`)
-//       }
-
-//       const data = await response.json()
-//       console.log("Image uploaded successfully:", data)
-//       return data.imageReceiptId || ""
-//     } catch (proxyError) {
-//       console.error("Error uploading image through proxy:", proxyError)
-
-//       // Try direct API call as fallback
-//       console.log("Trying direct API call as fallback...")
-//       const directResponse = await fetch(`${BASE_URL}/receipt/upload`, {
-//         method: "POST",
-//         headers: {
-//           "Content-Type": "application/json",
-//           Authorization: `Bearer ${token}`,
-//           Accept: "application/json",
-//         },
-//         body: JSON.stringify(payload),
-//       })
-
-//       if (!directResponse.ok) {
-//         const errorText = await directResponse.text()
-//         console.error(`Direct API call failed with status: ${directResponse.status}`, errorText)
-//         throw new Error(`Direct API call failed with status: ${directResponse.status}`)
-//       }
-
-//       const directData = await directResponse.json()
-//       console.log("Image uploaded successfully via direct API:", directData)
-//       return directData.imageReceiptId || ""
-//     }
-//   } catch (error) {
-//     console.error("All image upload methods failed:", error)
-//     logNetworkError(error, "uploadReceiptImage")
-
-//     // Return a mock image ID as last resort
-//     const mockImageId = `mock-image-${Date.now()}`
-//     console.log("Using mock image ID:", mockImageId)
-//     return mockImageId
-//   }
-// }
-
 // Function to get receipt image
 export async function getReceiptImage(imageReceiptId: string): Promise<string> {
   try {
@@ -821,27 +720,7 @@ export async function getReceiptImage(imageReceiptId: string): Promise<string> {
 
     // First try using our API proxy to avoid CORS
     try {
-      const response = await fetch(`/api/receipts/image?imageReceiptId=${imageReceiptId}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`API responded with status: ${response.status}`, errorText)
-        throw new Error(`API responded with status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log("Image fetched successfully")
-      return data.imageBase64 || ""
-    } catch (proxyError) {
-      console.error("Error fetching image through proxy:", proxyError)
-
-      // Try direct API call as fallback
-      console.log("Trying direct API call as fallback...")
+     
       const directResponse = await fetch(`${BASE_URL}/receipt/imageBase64?imageReceiptId=${imageReceiptId}`, {
         method: "GET",
         headers: {
@@ -859,8 +738,12 @@ export async function getReceiptImage(imageReceiptId: string): Promise<string> {
       const directData = await directResponse.json()
       console.log("Image fetched successfully via direct API")
       return directData.imageBase64 || ""
+    } catch (innerError) {
+      console.error("Error in direct API call:", innerError)
+      throw innerError
     }
-  } catch (error) {
+  }
+   catch (error) {
     console.error("All image fetching methods failed:", error)
     logNetworkError(error, "getReceiptImage")
 

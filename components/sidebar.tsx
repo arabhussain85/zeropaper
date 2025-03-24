@@ -37,7 +37,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { getUserData } from "@/utils/auth-helpers"
+import { getUserData, logoutUser } from "@/utils/auth-helpers"
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -61,11 +61,6 @@ export default function Sidebar() {
       name: "Analytics",
       href: "/analytics",
       icon: BarChart2,
-    },
-    {
-      name: "Receipts",
-      href: "/receipts",
-      icon: Receipt,
     },
     {
       name: "Electricity",
@@ -213,11 +208,6 @@ function SidebarContent({
       icon: BarChart2,
     },
     {
-      name: "Receipts",
-      href: "/receipts",
-      icon: Receipt,
-    },
-    {
       name: "Electricity",
       href: "/electricity",
       icon: Zap,
@@ -337,7 +327,10 @@ function SidebarContent({
 
       {/* Logout Button */}
       <div className="p-6 border-t">
-        <button className="flex items-center gap-3 px-4 py-3 w-full text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+        <button 
+          onClick={logoutUser} 
+          className="flex items-center gap-3 px-4 py-3 w-full text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+        >
           <LogOut className="w-5 h-5" />
           <span>Logout</span>
         </button>
