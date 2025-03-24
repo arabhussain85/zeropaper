@@ -2,7 +2,7 @@ import { createErrorMessage, safeParseJSON } from "@/utils/api-helpers"
 import { logNetworkError } from "@/utils/network-debug"
 
 // Base URL for API - use environment variable if available
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://services.stage.zeropaper.online/api/zpu"
 
 // Flag to enable mock data when API is unavailable
 const USE_MOCK_DATA = process.env.NEXT_PUBLIC_USE_MOCK_API === "true" || false
@@ -19,7 +19,7 @@ export async function sendOTP(email: string): Promise<{ success: boolean; messag
 
     // Use our server-side API route to avoid CORS issues
     const encodedEmail = encodeURIComponent(email)
-    const response = await fetch(`${BASE_URL}/otp/email/send?email=${email}`, {
+    const response = await fetch(`https://services.stage.zeropaper.online/api/zpu/otp/email/send?email=${email}`, {
       method: "POST",
 
       // No need to send email in body as it's now in the URL query parameter
@@ -115,7 +115,7 @@ export async function registerUser(userData: {
     })
 
     // Use our server-side API route to avoid CORS issues
-    const response = await fetch(`${BASE_URL}/users/register`, {
+    const response = await fetch(`https://services.stage.zeropaper.online/api/zpu/users/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -351,12 +351,11 @@ export async function resetPassword(resetData: {
       return { success: true, message: "Password reset successful (mock)" }
     }
 
-    // Use our server-side API route to avoid CORS issues
-    const response = await fetch("/api/auth", {
+    const response = await fetch("https://services.stage.zeropaper.online/api/zpu/users/forgot-password", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${getAuthToken()}`,
+        // Authorization: `Bearer ${getAuthToken()}`,
       },
       body: JSON.stringify({
         action: "resetPassword",
