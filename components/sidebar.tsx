@@ -18,6 +18,7 @@ import {
   QrCode,
   Trash2,
 } from "lucide-react"
+import DeleteAccountModal from "@/components/delete-account-modal"
 import Image from "next/image"
 import {
   DropdownMenu,
@@ -146,39 +147,15 @@ export default function Sidebar() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Account Confirmation Dialog */}
-      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-red-600">Delete Your Account</DialogTitle>
-            <DialogDescription>
-              This action cannot be undone. This will permanently delete your account and remove your data from our
-              servers.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="p-4 bg-red-50 rounded-md border border-red-200 mb-4">
-            <p className="text-red-800 text-sm">
-              All your receipts, payment information, and personal data will be permanently deleted.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setShowDeleteConfirm(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => {
-                // Add account deletion logic here
-                alert("Account deletion functionality will be implemented here")
-                setShowDeleteConfirm(false)
-              }}
-            >
-              Delete Account
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Delete Account Modal with OTP Verification */}
+      <DeleteAccountModal 
+        isOpen={showDeleteConfirm} 
+        onClose={() => setShowDeleteConfirm(false)} 
+        onSuccess={() => {
+          // Logout user after successful account deletion
+          logoutUser()
+        }} 
+      />
     </>
   )
 }

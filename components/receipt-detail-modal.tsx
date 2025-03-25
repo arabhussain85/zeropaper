@@ -124,156 +124,245 @@ export default function ReceiptDetailModal({
       description: "Receipt image has been downloaded successfully.",
     })
   }
-
   const handleExportPDF = () => {
-    if (!receipt) return
-
+    if (!receipt) return;
+  
     try {
       // Create a new PDF document
-      const doc = new jsPDF()
-      const pageWidth = doc.internal.pageSize.getWidth()
-      let yPos = 20
-      const lineHeight = 10
-      const margin = 20
-
-      // Zero Paper color scheme
-      const primaryColor = "#1a5fb4"
-      const secondaryColor = "#3584e4"
-      const accentColor = "#62a0ea"
-
-      // Add logo/header
-      doc.setFillColor(primaryColor)
-      doc.rect(0, 0, pageWidth, 40, "F")
-
-      // Add title
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(22)
-      doc.setFont("helvetica", "bold")
-      doc.text("ZERO PAPER", margin, 25)
-
-      doc.setFontSize(12)
-      doc.text("Digital Receipt Management", margin, 35)
-
-      yPos = 60
-
-      // Add receipt details section
-      doc.setFillColor(245, 245, 245)
-      doc.roundedRect(margin - 10, yPos - 15, pageWidth - margin * 2 + 20, 40, 3, 3, "F")
-
-      // Add store name and date
-      doc.setTextColor(0, 0, 0)
-      doc.setFontSize(16)
-      doc.setFont("helvetica", "bold")
-      doc.text(`${receipt.storeName}`, margin, yPos)
-
-      doc.setFontSize(10)
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(100, 100, 100)
-      doc.text(`Receipt Date: ${formatDate(receipt.date)}`, pageWidth - margin - 80, yPos)
-
-      yPos += lineHeight * 2
-
-      // Add category with emoji
-      doc.setTextColor(secondaryColor)
-      doc.setFontSize(12)
-      doc.text(`${getCategoryEmoji(receipt.category)} ${receipt.category.toUpperCase()}`, margin, yPos)
-      yPos += lineHeight * 2
-
-      // Add product details section
-      doc.setTextColor(0, 0, 0)
-      doc.setFontSize(14)
-      doc.setFont("helvetica", "bold")
-      doc.text("Product Details", margin, yPos)
-      yPos += lineHeight * 1.5
-
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let yPos = 50;
+      const lineHeight = 10;
+      const margin = 20;
+  
+      // Zero Paper color scheme - using the provided brand color
+      const primaryColor = "#1B9D65"; // Brand color
+      const secondaryColor = "#158a59"; // Slightly darker shade
+      const lightColor = "#e8f5f0"; // Light shade for backgrounds
+  
+      // Add header with logo
+      doc.setFillColor(primaryColor);
+      doc.rect(0, 0, pageWidth, 35, "F");
+      
+      // Add logo - we'll add a placeholder image since we can't directly load from URL
+      // In production, you would need to load and convert the logo to base64 first
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.text("ZERO PAPER", margin, 22);
+      
+      doc.setFontSize(12);
+      doc.text("Digital Receipt Management", margin, 32);
+  
+      // Add receipt number with decorative element
+      doc.setFillColor(255, 255, 255, 0.2);
+      doc.roundedRect(pageWidth - 100, 10, 80, 15, 2, 2, "F");
+      doc.setFontSize(10);
+      doc.text(`RECEIPT #${receipt.id.substring(0, 8)}`, pageWidth - 95, 20);
+  
+      // Add receipt details section with rounded corners and subtle shadow
+      doc.setDrawColor(220, 220, 220);
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(margin - 10, yPos - 15, pageWidth - margin * 2 + 20, 65, 5, 5, "FD");
+      
+      // Add store name and date in a clean layout
+      doc.setTextColor(primaryColor);
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${receipt.storeName}`, margin, yPos);
+  
+      // Add date in a stylish box
+      doc.setFillColor(lightColor);
+      doc.roundedRect(pageWidth - margin - 90, yPos - 10, 80, 20, 3, 3, "F");
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 80, 80);
+      doc.text("RECEIPT DATE", pageWidth - margin - 85, yPos - 2);
+      
+      doc.setTextColor(primaryColor);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(`${formatDate(receipt.date)}`, pageWidth - margin - 85, yPos + 7);
+  
+      yPos += lineHeight * 2;
+  
+      // Add category with emoji in a stylish badge
+      doc.setFillColor(lightColor);
+      const categoryText = `${getCategoryEmoji(receipt.category)} ${receipt.category.toUpperCase()}`;
+      const textWidth = doc.getTextWidth(categoryText) + 10;
+      doc.roundedRect(margin, yPos - 7, textWidth, 14, 7, 7, "F");
+      
+      doc.setTextColor(primaryColor);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(categoryText, margin + 5, yPos);
+      
+      yPos += lineHeight * 3.5;
+  
+      // Add decorative separator line
+      doc.setDrawColor(primaryColor);
+      doc.setLineWidth(0.5);
+      doc.line(margin, yPos - 5, pageWidth - margin, yPos - 5);
+  
+      // Add product details section with modern layout
+      doc.setTextColor(80, 80, 80);
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("PRODUCT DETAILS", margin, yPos);
+      yPos += lineHeight * 1.5;
+  
+      // Create a product details box
+      doc.setFillColor(lightColor);
+      doc.roundedRect(margin - 5, yPos - 8, pageWidth - margin * 2 + 10, 40, 3, 3, "F");
+      yPos += 5;
+  
       // Add product name
-      doc.setFontSize(12)
-      doc.setFont("helvetica", "normal")
-      doc.text(`Product: ${receipt.productName}`, margin, yPos)
-      yPos += lineHeight
-
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(60, 60, 60);
+      doc.text("Product:", margin, yPos);
+      
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text(`${receipt.productName}`, margin + 45, yPos);
+      yPos += lineHeight * 1.3;
+  
       // Add price with highlighted box
-      doc.setFillColor(accentColor)
-      doc.roundedRect(margin - 5, yPos - 8, 80, 12, 2, 2, "F")
-      doc.setTextColor(255, 255, 255)
-      doc.setFont("helvetica", "bold")
-      doc.text(`Price: ${getCurrencySymbol(receipt.currency)}${receipt.price.toFixed(2)}`, margin, yPos)
-      yPos += lineHeight * 2
-
-      // Add dates section
-      doc.setTextColor(0, 0, 0)
-      doc.setFontSize(14)
-      doc.setFont("helvetica", "bold")
-      doc.text("Important Dates", margin, yPos)
-      yPos += lineHeight * 1.5
-
-      doc.setFontSize(12)
-      doc.setFont("helvetica", "normal")
-
-      if (receipt.validUptoDate) {
-        doc.text(`Valid Until: ${formatDate(receipt.validUptoDate)}`, margin, yPos)
-        yPos += lineHeight
-      }
-
+      doc.setTextColor(60, 60, 60);
+      doc.setFont("helvetica", "normal");
+      doc.text("Price:", margin, yPos);
+      
+      // Create price badge
+      doc.setFillColor(primaryColor);
+      doc.roundedRect(margin + 45, yPos - 8, 60, 12, 2, 2, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${getCurrencySymbol(receipt.currency)}${receipt.price.toFixed(2)}`, margin + 50, yPos);
+      yPos += lineHeight * 3;
+  
+      // Add dates section with elegant design
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(220, 220, 220);
+      doc.roundedRect(margin - 5, yPos - 8, pageWidth - margin * 2 + 10, 50, 3, 3, "FD");
+      
+      doc.setTextColor(80, 80, 80);
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("IMPORTANT DATES", margin, yPos);
+      yPos += lineHeight * 1.5;
+  
+      // Create a two-column layout for dates
+      const col1X = margin + 5;
+      const col2X = pageWidth / 2 + 10;
+  
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      
+      // Column 1
+      doc.text("Valid Until:", col1X, yPos);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text(receipt.validUptoDate ? formatDate(receipt.validUptoDate) : "N/A", col1X + 60, yPos);
+      
+      // Column 2
       if (receipt.refundableUptoDate) {
-        doc.text(`Refundable Until: ${formatDate(receipt.refundableUptoDate)}`, margin, yPos)
-        yPos += lineHeight
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text("Refundable Until:", col2X, yPos);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(40, 40, 40);
+        doc.text(formatDate(receipt.refundableUptoDate), col2X + 65, yPos);
       }
-
-      // Add store location if available
+      
+      yPos += lineHeight * 2;
+  
+      // Add store information
       if (receipt.storeLocation) {
-        yPos += lineHeight
-        doc.setFontSize(14)
-        doc.setFont("helvetica", "bold")
-        doc.text("Store Information", margin, yPos)
-        yPos += lineHeight * 1.5
-
-        doc.setFontSize(12)
-        doc.setFont("helvetica", "normal")
-        doc.text(`Location: ${receipt.storeLocation}`, margin, yPos)
-        yPos += lineHeight
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text("Store Location:", col1X, yPos);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(40, 40, 40);
+        doc.text(receipt.storeLocation, col1X + 60, yPos);
       }
-
+      
+      yPos += lineHeight * 4;
+  
       // Add receipt image if available
       if (receiptImage) {
-        yPos += lineHeight * 2
-        doc.setFontSize(14)
-        doc.setFont("helvetica", "bold")
-        doc.text("Receipt Image", margin, yPos)
-        yPos += lineHeight * 1.5
-
+        // Add a heading for the image section
+        doc.setTextColor(80, 80, 80);
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("RECEIPT IMAGE", margin, yPos);
+        yPos += lineHeight;
+        
+        // Create an elegant frame for the image
+        doc.setDrawColor(primaryColor);
+        doc.setLineWidth(1);
+        
         // Calculate image dimensions to fit within page width while maintaining aspect ratio
-        const imgWidth = pageWidth - margin * 2
-        const imgHeight = 120 // Adjust as needed
-
+        const imgWidth = pageWidth - margin * 2;
+        const imgHeight = 110; // Adjust as needed
+        
+        // Draw frame
+        doc.roundedRect(margin - 5, yPos, imgWidth + 10, imgHeight + 10, 3, 3, "S");
+        
         // Add the image
-        doc.addImage(`data:image/jpeg;base64,${receiptImage}`, "JPEG", margin, yPos, imgWidth, imgHeight)
-        yPos += imgHeight + lineHeight
+        doc.addImage(`data:image/jpeg;base64,${receiptImage}`, "JPEG", margin, yPos + 5, imgWidth, imgHeight);
+        yPos += imgHeight + 15;
       }
-
-      // Add footer
-      const footerPosition = doc.internal.pageSize.getHeight() - 20
-      doc.setFontSize(10)
-      doc.setTextColor(100, 100, 100)
-      doc.text("Generated with Zero Paper - Your Digital Receipt Manager", margin, footerPosition)
-      doc.text(`Receipt ID: ${receipt.id}`, margin, footerPosition + 7)
-
+  
+      // Add a QR code placeholder (in a real app, you would generate an actual QR code)
+      const qrSize = 40;
+      const qrX = pageWidth - margin - qrSize;
+      const qrY = pageHeight - 60;
+      
+      // Drawing a placeholder QR frame
+      doc.setDrawColor(primaryColor);
+      doc.setLineWidth(1);
+      doc.rect(qrX, qrY, qrSize, qrSize);
+      
+      // Add lines to suggest a QR code
+      doc.setLineWidth(0.5);
+      doc.line(qrX + 10, qrY + 10, qrX + 30, qrY + 10);
+      doc.line(qrX + 10, qrY + 20, qrX + 30, qrY + 20);
+      doc.line(qrX + 10, qrY + 30, qrX + 30, qrY + 30);
+      
+      doc.setFontSize(8);
+      doc.setTextColor(80, 80, 80);
+      doc.text("Scan to verify", qrX, qrY + qrSize + 10);
+  
+      // Add stylish footer with brand colors
+      doc.setFillColor(primaryColor);
+      doc.rect(0, pageHeight - 25, pageWidth, 25, "F");
+      
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "normal");
+      doc.text("Zero Paper - Your Digital Receipt Manager", margin, pageHeight - 15);
+      doc.setFontSize(8);
+      doc.text(`Receipt ID: ${receipt.id} | Generated on: ${new Date().toLocaleDateString()}`, margin, pageHeight - 8);
+  
       // Save the PDF
-      doc.save(`receipt-${receipt.id}.pdf`)
-
+      doc.save(`receipt-${receipt.id}.pdf`);
+  
       toast({
         title: "PDF Exported",
         description: "Receipt has been exported as PDF successfully.",
-      })
+      });
     } catch (error) {
-      console.error("Error exporting PDF:", error)
+      console.error("Error exporting PDF:", error);
       toast({
         title: "Export Failed",
         description: "Failed to export receipt as PDF. Please try again.",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   if (!receipt) return null
 
