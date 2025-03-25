@@ -106,9 +106,9 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'    },
   }
-
+  const userData = getUserData()
   // Make the request
-  const response = await fetch(url, authOptions)
+  const response = await fetch(`https://services.stage.zeropaper.online/api/zpu/receipts/get_by_user_id?storedUserId=${userData.uid}`, authOptions)
 
   // Handle authentication errors
   if (response.status === 401 || response.status === 403) {
@@ -160,7 +160,7 @@ export async function addReceipt(receipt: Omit<Receipt, "uid">): Promise<Receipt
 
 
 
-    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/add`, {
+    const response = await authenticatedFetch(`https://services.stage.zeropaper.online/api/zpu/receipts/add`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -206,7 +206,7 @@ export async function getReceiptsByUserId(): Promise<Receipt[]> {
 
     console.log("Fetching receipts for user:", userData.uid)
 
-    const response = await authenticatedFetch(`http://198.71.58.230:8787/api/zpu/receipts/get_by_user_id?storedUserId=${userData.uid}`, {
+    const response = await authenticatedFetch(`https://services.stage.zeropaper.online/api/zpu/receipts/get_by_user_id?storedUserId=${userData.uid}`, {
       method: "GET",
 
       headers: {

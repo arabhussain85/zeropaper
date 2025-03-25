@@ -261,7 +261,7 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
       if (imageBase64) {
       }
 
-      const response = await fetch("http://198.71.58.230:8787/api/zpu/receipts/add", {
+      const response = await fetch("https://services.stage.zeropaper.online/api/zpu/receipts/add", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
