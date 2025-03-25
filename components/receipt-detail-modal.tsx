@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Loader2, Download, Trash2, X, ImageIcon, MapPin, Calendar, CreditCard, Check, FileText } from "lucide-react"
@@ -31,6 +31,13 @@ export default function ReceiptDetailModal({
   const [success, setSuccess] = useState(false)
   const { toast } = useToast()
 
+  useEffect(() => {
+    // Reset states when a new receipt is opened
+    setSuccess(false)
+    setError(null)
+    setIsDeleting(false)
+  }, [receipt?.id])
+
   const getCategoryEmoji = (category: string) => {
     switch (category) {
       case "business":
@@ -60,47 +67,47 @@ export default function ReceiptDetailModal({
   }
   const handleDelete = async () => {
     if (!receipt) {
-      setError("No receipt data available");
-      return;
+      setError("No receipt data available")
+      return
     }
-    
+
     if (!receipt.id) {
-      setError("Receipt ID is undefined or missing");
-      return;
+      setError("Receipt ID is undefined or missing")
+      return
     }
-  
+
     try {
-      setIsDeleting(true);
-      setError(null);
-  
-      const success = await deleteReceipt(receipt.id);
-  
+      setIsDeleting(true)
+      setError(null)
+
+      const success = await deleteReceipt(receipt.id)
+
       if (success) {
-        setSuccess(true);
+        setSuccess(true)
         toast({
           title: "Receipt Deleted",
           description: "The receipt has been successfully deleted.",
-        });
+        })
         // Call the onDelete callback to update the parent component
-        onDelete(receipt.id);
+        onDelete(receipt.id)
         // Close the modal after a short delay
         setTimeout(() => {
-          onClose();
-        }, 1500);
+          onClose()
+        }, 1500)
       } else {
-        throw new Error("Failed to delete receipt");
+        throw new Error("Failed to delete receipt")
       }
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to delete receipt");
+      setError(error instanceof Error ? error.message : "Failed to delete receipt")
       toast({
         title: "Error",
         description: "Failed to delete receipt. Please try again.",
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsDeleting(false);
+      setIsDeleting(false)
     }
-  };
+  }
   const handleDownloadImage = () => {
     if (!receiptImage || !receipt) return
 
@@ -129,29 +136,79 @@ export default function ReceiptDetailModal({
       const lineHeight = 10
       const margin = 20
 
+      // Zero Paper color scheme
+      const primaryColor = "#1a5fb4"
+      const secondaryColor = "#3584e4"
+      const accentColor = "#62a0ea"
+
+      // Add logo/header
+      doc.setFillColor(primaryColor)
+      doc.rect(0, 0, pageWidth, 40, "F")
+
       // Add title
-      doc.setFontSize(18)
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(22)
       doc.setFont("helvetica", "bold")
-      doc.text(`Receipt: ${receipt.storeName}`, margin, yPos)
+      doc.text("ZERO PAPER", margin, 25)
+
+      doc.setFontSize(12)
+      doc.text("Digital Receipt Management", margin, 35)
+
+      yPos = 60
+
+      // Add receipt details section
+      doc.setFillColor(245, 245, 245)
+      doc.roundedRect(margin - 10, yPos - 15, pageWidth - margin * 2 + 20, 40, 3, 3, "F")
+
+      // Add store name and date
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(16)
+      doc.setFont("helvetica", "bold")
+      doc.text(`${receipt.storeName}`, margin, yPos)
+
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(100, 100, 100)
+      doc.text(`Receipt Date: ${formatDate(receipt.date)}`, pageWidth - margin - 80, yPos)
+
       yPos += lineHeight * 2
 
-      // Add receipt details
+      // Add category with emoji
+      doc.setTextColor(secondaryColor)
       doc.setFontSize(12)
-      doc.setFont("helvetica", "normal")
+      doc.text(`${getCategoryEmoji(receipt.category)} ${receipt.category.toUpperCase()}`, margin, yPos)
+      yPos += lineHeight * 2
 
-      // Add category and product name
-      doc.text(`Category: ${receipt.category}`, margin, yPos)
-      yPos += lineHeight
-      doc.text(`Product: ${receipt.productName}`, margin, yPos)
+      // Add product details section
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(14)
+      doc.setFont("helvetica", "bold")
+      doc.text("Product Details", margin, yPos)
       yPos += lineHeight * 1.5
 
-      // Add price
-      doc.text(`Price: ${getCurrencySymbol(receipt.currency)}${receipt.price.toFixed(2)}`, margin, yPos)
+      // Add product name
+      doc.setFontSize(12)
+      doc.setFont("helvetica", "normal")
+      doc.text(`Product: ${receipt.productName}`, margin, yPos)
       yPos += lineHeight
 
-      // Add dates
-      doc.text(`Receipt Date: ${formatDate(receipt.date)}`, margin, yPos)
-      yPos += lineHeight
+      // Add price with highlighted box
+      doc.setFillColor(accentColor)
+      doc.roundedRect(margin - 5, yPos - 8, 80, 12, 2, 2, "F")
+      doc.setTextColor(255, 255, 255)
+      doc.setFont("helvetica", "bold")
+      doc.text(`Price: ${getCurrencySymbol(receipt.currency)}${receipt.price.toFixed(2)}`, margin, yPos)
+      yPos += lineHeight * 2
+
+      // Add dates section
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(14)
+      doc.setFont("helvetica", "bold")
+      doc.text("Important Dates", margin, yPos)
+      yPos += lineHeight * 1.5
+
+      doc.setFontSize(12)
+      doc.setFont("helvetica", "normal")
 
       if (receipt.validUptoDate) {
         doc.text(`Valid Until: ${formatDate(receipt.validUptoDate)}`, margin, yPos)
@@ -165,36 +222,41 @@ export default function ReceiptDetailModal({
 
       // Add store location if available
       if (receipt.storeLocation) {
-        yPos += lineHeight * 0.5
-        doc.text(`Store Location: ${receipt.storeLocation}`, margin, yPos)
         yPos += lineHeight
-      }
+        doc.setFontSize(14)
+        doc.setFont("helvetica", "bold")
+        doc.text("Store Information", margin, yPos)
+        yPos += lineHeight * 1.5
 
-      // Add receipt type if available
-      if (receipt.receiptType) {
-        doc.text(`Receipt Type: ${receipt.receiptType}`, margin, yPos)
-        yPos += lineHeight
-      }
-
-      // Add added date if available
-      if (receipt.addedDate) {
-        doc.text(`Added On: ${formatDate(receipt.addedDate)}`, margin, yPos)
+        doc.setFontSize(12)
+        doc.setFont("helvetica", "normal")
+        doc.text(`Location: ${receipt.storeLocation}`, margin, yPos)
         yPos += lineHeight
       }
 
       // Add receipt image if available
       if (receiptImage) {
-        yPos += lineHeight
-        doc.text("Receipt Image:", margin, yPos)
-        yPos += lineHeight
+        yPos += lineHeight * 2
+        doc.setFontSize(14)
+        doc.setFont("helvetica", "bold")
+        doc.text("Receipt Image", margin, yPos)
+        yPos += lineHeight * 1.5
 
         // Calculate image dimensions to fit within page width while maintaining aspect ratio
         const imgWidth = pageWidth - margin * 2
-        const imgHeight = 100 // Adjust as needed
+        const imgHeight = 120 // Adjust as needed
 
         // Add the image
         doc.addImage(`data:image/jpeg;base64,${receiptImage}`, "JPEG", margin, yPos, imgWidth, imgHeight)
+        yPos += imgHeight + lineHeight
       }
+
+      // Add footer
+      const footerPosition = doc.internal.pageSize.getHeight() - 20
+      doc.setFontSize(10)
+      doc.setTextColor(100, 100, 100)
+      doc.text("Generated with Zero Paper - Your Digital Receipt Manager", margin, footerPosition)
+      doc.text(`Receipt ID: ${receipt.id}`, margin, footerPosition + 7)
 
       // Save the PDF
       doc.save(`receipt-${receipt.id}.pdf`)
@@ -255,8 +317,8 @@ export default function ReceiptDetailModal({
                   alt="Receipt"
                   className="w-full h-full object-contain"
                   onError={(e) => {
-                    console.error("Error loading receipt image");
-                    e.currentTarget.src = "/placeholder.jpg";
+                    console.error("Error loading receipt image")
+                    e.currentTarget.src = "/placeholder.jpg"
                   }}
                 />
                 <div className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-md text-xs flex items-center">
@@ -362,7 +424,12 @@ export default function ReceiptDetailModal({
 
         <DialogFooter className="flex justify-between items-center mt-6">
           <div className="flex gap-2">
-            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting || success}>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className={success ? "opacity-50 cursor-not-allowed" : ""}
+            >
               {isDeleting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -375,7 +442,12 @@ export default function ReceiptDetailModal({
                 </>
               )}
             </Button>
-            <Button variant="outline" onClick={handleExportPDF} disabled={isDeleting || success}>
+            <Button
+              variant="outline"
+              onClick={handleExportPDF}
+              disabled={isDeleting}
+              className={success ? "opacity-50 cursor-not-allowed" : ""}
+            >
               <FileText className="w-4 h-4 mr-2" />
               Export PDF
             </Button>
