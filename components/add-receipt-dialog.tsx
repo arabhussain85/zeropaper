@@ -29,11 +29,12 @@ interface AddReceiptDialogProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
+  initialCategory?: string
 }
 
-export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddReceiptDialogProps) {
+export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCategory }: AddReceiptDialogProps) {
   const [step, setStep] = useState(1)
-  const [category, setCategory] = useState("business")
+  const [category, setCategory] = useState(initialCategory || "business")
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +61,7 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
   useEffect(() => {
     if (isOpen) {
       setStep(1)
-      setCategory("business")
+      setCategory(initialCategory || "business")
       setAgreedToTerms(false)
       setIsLoading(false)
       setError(null)
@@ -80,7 +81,7 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
         receiptType: "manual",
       })
     }
-  }, [isOpen])
+  }, [isOpen, initialCategory])
 
   const handleNext = () => {
     setError(null)
@@ -156,63 +157,70 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
 
   const handleSubmit = async () => {
     try {
-      setIsLoading(true);
-      setError(null);
+      setIsLoading(true)
+      setError(null)
 
       // Validate required fields
-      if (!formData.productName || !formData.storeName || !formData.date || !formData.price || !category || !formData.currency) {
-        setError("Please fill in all required fields");
-        setIsLoading(false);
-        return;
+      if (
+        !formData.productName ||
+        !formData.storeName ||
+        !formData.date ||
+        !formData.price ||
+        !category ||
+        !formData.currency
+      ) {
+        setError("Please fill in all required fields")
+        setIsLoading(false)
+        return
       }
 
       // Get user ID from auth
-      const userData = getUserData();
+      const userData = getUserData()
       if (!userData || !userData.uid) {
-        setError("User ID not found. Please log in again.");
-        window.location.href = "/login";
-        return;
+        setError("User ID not found. Please log in again.")
+        window.location.href = "/login"
+        return
       }
 
       // Refresh the auth token if needed
-      const tokenRefreshed = await refreshAuthTokenIfNeeded();
+      const tokenRefreshed = await refreshAuthTokenIfNeeded()
       if (!tokenRefreshed) {
-        setError("Your session has expired. Please log in again.");
-        window.location.href = "/login";
-        return;
+        setError("Your session has expired. Please log in again.")
+        window.location.href = "/login"
+        return
       }
 
       function formatDate(dateString) {
-        if (!dateString) return undefined; // Handle undefined dates
-        const date = new Date(dateString);
+        if (!dateString) return undefined // Handle undefined dates
+        const date = new Date(dateString)
 
-        const day = String(date.getDate()).padStart(2, "0");
-        const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are zero-based
-        const year = date.getFullYear();
-        const hours = String(date.getHours()).padStart(2, "0");
-        const minutes = String(date.getMinutes()).padStart(2, "0");
-        const seconds = String(date.getSeconds()).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0")
+        const month = String(date.getMonth() + 1).padStart(2, "0") // Months are zero-based
+        const year = date.getFullYear()
+        const hours = String(date.getHours()).padStart(2, "0")
+        const minutes = String(date.getMinutes()).padStart(2, "0")
+        const seconds = String(date.getSeconds()).padStart(2, "0")
 
-        return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
+        return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`
       }
-      let imageBase64 = null;
-      console.log("Selected File : "+selectedFile?.size)
+      let imageBase64 = null
+      console.log("Selected File : " + selectedFile?.size)
       if (selectedFile && imageUploaded) {
-        console.log('image is being uploaded')
+        console.log("image is being uploaded")
         try {
-          imageBase64 = await fileToBase64(selectedFile);
-          console.log("imageBase64:", imageBase64); // Debugging line to check the output
+          imageBase64 = await fileToBase64(selectedFile)
+          console.log("imageBase64:", imageBase64) // Debugging line to check the output
         } catch (error) {
-          console.error("Error converting file to base64:", error);
-          setError("Failed to convert image to base64");
-          setIsLoading(false);
-          return;
+          console.error("Error converting file to base64:", error)
+          setError("Failed to convert image to base64")
+          setIsLoading(false)
+          return
         }
       }
 
       const receiptData = {
         // formDataEncoded.append("imageBase64", 'base64,'+imageBase64);
-        imageBase64:imageBase64,
+        imageBase64: imageBase64,
         price: Number.parseFloat(formData.price),
         productName: formData.productName,
         addedDate: formatDate(formData.date),
@@ -224,41 +232,16 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
         uid: userData.uid,
         updatedDate: formatDate(formData.date),
         validUptoDate: formatDate(formData.validUptoDate),
-        currency: formData.currency, 
-        receiptType: formData.receiptType,  
-
-                
-        
-        
-        
-      };
-
-      console.log("User ID:", userData.uid);
-      console.log("Category:", category);
-      console.log("Price:", formData.price, "Parsed Price:", receiptData.price);
-      console.log("Product Name:", receiptData.productName);
-      console.log("Store Location:", receiptData.storeLocation);
-      console.log("Store Name:", receiptData.storeName);
-      // console.log("Receipt Type:", receiptData.receiptType);
-      console.log("Currency:", receiptData.currency);
-      console.log("Date:", receiptData.date);
-      console.log("Valid Upto Date:", receiptData.validUptoDate);
-      console.log("Refundable Upto Date:", receiptData.refundableUptoDate);
-
-
-      // Get image data if available
-      // Get image data if available
-      
-      // console.log("image : " + imageBase64);
+        currency: formData.currency,
+        receiptType: formData.receiptType,
+      }
 
       // Submit receipt with image if available
-      const formDataEncoded = new URLSearchParams();
+      const formDataEncoded = new URLSearchParams()
       for (const [key, value] of Object.entries(receiptData)) {
         if (value !== undefined && value !== null) {
-          formDataEncoded.append(key, value.toString());
+          formDataEncoded.append(key, value.toString())
         }
-      }
-      if (imageBase64) {
       }
 
       const response = await fetch("https://services.stage.zeropaper.online/api/zpu/receipts/add", {
@@ -268,40 +251,40 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess }: AddRece
           Authorization: `Bearer ${getAuthToken()}`,
         },
         body: formDataEncoded.toString(),
-      });
+      })
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to add receipt");
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to add receipt")
       }
 
-      const data = await response.json();
-      setSuccess(true);
+      const data = await response.json()
+      setSuccess(true)
       toast({
         title: "Receipt Added",
         description: "Your receipt has been added successfully.",
-      });
+      })
 
       if (onSuccess) {
         setTimeout(() => {
-          onSuccess();
-        }, 1500);
+          onSuccess()
+        }, 1500)
       }
 
       setTimeout(() => {
-        onClose();
-      }, 2000);
+        onClose()
+      }, 2000)
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to add receipt");
+      setError(error instanceof Error ? error.message : "Failed to add receipt")
       toast({
         title: "Error",
         description: "Failed to add receipt. Please try again.",
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   const isStepValid = () => {
     switch (step) {

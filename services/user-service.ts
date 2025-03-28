@@ -90,6 +90,9 @@ export async function deleteUserAccount(email: string, otp: string): Promise<{ s
         "Authorization": `Bearer ${authToken}`,
       },
     });
+    if (response.ok){
+      logou
+    }
 
     // Read response as text first
     const responseText = await response.text();
