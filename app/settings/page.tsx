@@ -1,10 +1,9 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { User, Mail, Phone, Key, Save, Loader2, Trash2, QrCode } from "lucide-react"
+import { User, Mail, Phone, QrCode, Loader2, Trash2, AlertTriangle } from 'lucide-react'
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,6 +22,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
   Dialog,
@@ -33,13 +33,20 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import Sidebar from "@/components/sidebar"
+import { useRouter } from "next/navigation"
+import OTPInput from "@/components/otp-input"
+import { sendOTP } from "@/services/api-wrapper"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile")
-  const [isLoading, setIsLoading] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [showQrCode, setShowQrCode] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showOtpInput, setShowOtpInput] = useState(false)
+  const [otpValue, setOtpValue] = useState<string[]>(Array(4).fill(""))
+  const [isSendingOtp, setIsSendingOtp] = useState(false)
   const { toast } = useToast()
+  const router = useRouter()
 
   // Get user data
   const userData = getUserData()
@@ -47,9 +54,6 @@ export default function SettingsPage() {
     name: userData?.name || "",
     email: userData?.email || "",
     phone: userData?.phone || "",
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,94 +61,94 @@ export default function SettingsPage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleProfileUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
+  const handleSendOTP = async () => {
+    if (!formData.email) {
       toast({
-        title: "Profile Updated",
-        description: "Your profile information has been updated successfully.",
-      })
-    } catch (error) {
-      toast({
-        title: "Update Failed",
-        description: "Failed to update profile. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handlePasswordUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (formData.newPassword !== formData.confirmPassword) {
-      toast({
-        title: "Passwords Don't Match",
-        description: "New password and confirmation password must match.",
+        title: "Email Required",
+        description: "Your email is required to send the verification code.",
         variant: "destructive",
       })
       return
     }
 
-    setIsLoading(true)
-
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      setFormData((prev) => ({
-        ...prev,
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      }))
-
-      toast({
-        title: "Password Updated",
-        description: "Your password has been updated successfully.",
-      })
+      setIsSendingOtp(true)
+      const result = await sendOTP(formData.email)
+      
+      if (result.success) {
+        toast({
+          title: "Verification Code Sent",
+          description: "Please check your email for the verification code.",
+        })
+        setShowOtpInput(true)
+      } else {
+        toast({
+          title: "Failed to Send Code",
+          description: result.message || "Please try again later.",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("Error sending OTP:", error)
       toast({
-        title: "Update Failed",
-        description: "Failed to update password. Please try again.",
+        title: "Error",
+        description: "Failed to send verification code. Please try again.",
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setIsSendingOtp(false)
     }
   }
 
   const handleDeleteAccount = async () => {
-    setIsLoading(true)
-
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      setIsDeleting(true)
+      
+      // Get the OTP from the input
+      const otp = otpValue.join("")
+      
+      if (otp.length !== 4) {
+        toast({
+          title: "Invalid Code",
+          description: "Please enter the complete verification code.",
+          variant: "destructive",
+        })
+        setIsDeleting(false)
+        return
+      }
+      
+      // Call the delete account API with OTP
+      const response = await fetch(`https://services.stage.zeropaper.online/api/zpu/users/delete?otp=${otp}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("authToken")}`,
+          "Content-Type": "application/json"
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error("Failed to delete account. Invalid verification code.")
+      }
 
       toast({
         title: "Account Deleted",
-        description: "Your account has been deleted successfully.",
+        description: "Your account has been successfully deleted.",
       })
 
-      // Redirect to login after account deletion
+      // Redirect to login page after deletion
       setTimeout(() => {
         logoutUser()
+        router.push("/login")
       }, 1500)
     } catch (error) {
+      console.error("Error deleting account:", error)
       toast({
         title: "Deletion Failed",
-        description: "Failed to delete account. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to delete account. Please try again.",
         variant: "destructive",
       })
-      setShowDeleteConfirm(false)
     } finally {
-      setIsLoading(false)
+      setIsDeleting(false)
     }
   }
 
@@ -189,9 +193,8 @@ export default function SettingsPage() {
           animate="visible"
         >
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-8">
+            <TabsList className="grid w-full grid-cols-1 mb-8">
               <TabsTrigger value="profile">Profile</TabsTrigger>
-              <TabsTrigger value="security">Security</TabsTrigger>
             </TabsList>
 
             <TabsContent value="profile">
@@ -199,233 +202,186 @@ export default function SettingsPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Profile Information</CardTitle>
-                    <CardDescription>Update your account profile information and contact details</CardDescription>
+                    <CardDescription>View your account profile information and contact details</CardDescription>
                   </CardHeader>
-                  <form onSubmit={handleProfileUpdate}>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center gap-4 mb-6">
-                        <div className="w-16 h-16 bg-[#1B9D65] rounded-full flex items-center justify-center text-white">
-                          <User className="w-8 h-8" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">{formData.name || "User"}</h3>
-                          <p className="text-sm text-gray-500">{formData.email || "user@example.com"}</p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowQrCode(true)}
-                          className="ml-auto"
-                        >
-                          <QrCode className="w-4 h-4 mr-2" />
-                          Show QR Code
-                        </Button>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="w-16 h-16 bg-[#1B9D65] rounded-full flex items-center justify-center text-white">
+                        <User className="w-8 h-8" />
                       </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="name">Full Name</Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                          <Input
-                            id="name"
-                            name="name"
-                            value={formData.name}
-                            onChange={handleInputChange}
-                            className="pl-10"
-                            placeholder="Your full name"
-                          />
-                        </div>
+                      <div>
+                        <h3 className="font-medium">{formData.name || "User"}</h3>
+                        <p className="text-sm text-gray-500">{formData.email || "user@example.com"}</p>
                       </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="email">Email Address</Label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                          <Input
-                            id="email"
-                            name="email"
-                            type="email"
-                            value={formData.email}
-                            onChange={handleInputChange}
-                            className="pl-10"
-                            placeholder="Your email address"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number</Label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                          <Input
-                            id="phone"
-                            name="phone"
-                            value={formData.phone}
-                            onChange={handleInputChange}
-                            className="pl-10"
-                            placeholder="Your phone number"
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                    <CardFooter>
-                      <Button type="submit" className="bg-[#1B9D65] hover:bg-[#1B9D65]/90" disabled={isLoading}>
-                        {isLoading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4 mr-2" />
-                            Save Changes
-                          </>
-                        )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowQrCode(true)}
+                        className="ml-auto"
+                      >
+                        <QrCode className="w-4 h-4 mr-2" />
+                        Show QR Code
                       </Button>
-                    </CardFooter>
-                  </form>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Full Name</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <Input
+                          id="name"
+                          name="name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          placeholder="Your full name"
+                          readOnly
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email Address</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <Input
+                          id="email"
+                          name="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          placeholder="Your email address"
+                          readOnly
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Phone Number</Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <Input
+                          id="phone"
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          placeholder="Your phone number"
+                          readOnly
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
                 </Card>
               </motion.div>
-            </TabsContent>
 
-            <TabsContent value="security">
-              <div className="space-y-8">
-                <motion.div variants={itemVariants}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Change Password</CardTitle>
-                      <CardDescription>Update your password to keep your account secure</CardDescription>
-                    </CardHeader>
-                    <form onSubmit={handlePasswordUpdate}>
-                      <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="currentPassword">Current Password</Label>
-                          <div className="relative">
-                            <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                            <Input
-                              id="currentPassword"
-                              name="currentPassword"
-                              type="password"
-                              value={formData.currentPassword}
-                              onChange={handleInputChange}
-                              className="pl-10"
-                              placeholder="Enter current password"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="newPassword">New Password</Label>
-                          <div className="relative">
-                            <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                            <Input
-                              id="newPassword"
-                              name="newPassword"
-                              type="password"
-                              value={formData.newPassword}
-                              onChange={handleInputChange}
-                              className="pl-10"
-                              placeholder="Enter new password"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                          <div className="relative">
-                            <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                            <Input
-                              id="confirmPassword"
-                              name="confirmPassword"
-                              type="password"
-                              value={formData.confirmPassword}
-                              onChange={handleInputChange}
-                              className="pl-10"
-                              placeholder="Confirm new password"
-                            />
-                          </div>
-                        </div>
-                      </CardContent>
-                      <CardFooter>
-                        <Button type="submit" className="bg-[#1B9D65] hover:bg-[#1B9D65]/90" disabled={isLoading}>
-                          {isLoading ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Updating...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="w-4 h-4 mr-2" />
-                              Update Password
-                            </>
-                          )}
+              <motion.div variants={itemVariants} className="mt-8">
+                <Card className="border-red-100">
+                  <CardHeader>
+                    <CardTitle className="text-red-600">Danger Zone</CardTitle>
+                    <CardDescription>Permanently delete your account and all associated data</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800">
+                      <AlertDescription>
+                        This action cannot be undone. All your data will be permanently removed.
+                      </AlertDescription>
+                    </Alert>
+                  </CardContent>
+                  <CardFooter>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" className="bg-red-600 hover:bg-red-700">
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete Account
                         </Button>
-                      </CardFooter>
-                    </form>
-                  </Card>
-                </motion.div>
-
-                <motion.div variants={itemVariants}>
-                  <Card className="border-red-100">
-                    <CardHeader>
-                      <CardTitle className="text-red-600">Danger Zone</CardTitle>
-                      <CardDescription>Permanently delete your account and all associated data</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800">
-                        <AlertDescription>
-                          This action cannot be undone. All your data will be permanently removed.
-                        </AlertDescription>
-                      </Alert>
-                    </CardContent>
-                    <CardFooter>
-                      <Button
-                        variant="destructive"
-                        onClick={() => setShowDeleteConfirm(true)}
-                        className="bg-red-600 hover:bg-red-700"
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete Account
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                </motion.div>
-              </div>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                            <AlertTriangle className="h-5 w-5" />
+                            Delete Your Account
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete your account and remove your data from
+                            our servers.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="p-4 bg-red-50 rounded-md border border-red-200 mb-4">
+                          <p className="text-red-800 text-sm">
+                            All your receipts, payment information, and personal data will be permanently deleted.
+                          </p>
+                        </div>
+                        
+                        {!showOtpInput ? (
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isSendingOtp}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleSendOTP}
+                              disabled={isSendingOtp}
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              {isSendingOtp ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Sending Code...
+                                </>
+                              ) : (
+                                "Send Verification Code"
+                              )}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="text-center">
+                              <p className="text-sm text-gray-600 mb-4">
+                                Enter the verification code sent to your email
+                              </p>
+                              <OTPInput 
+                                length={4} 
+                                value={otpValue} 
+                                onChange={setOtpValue} 
+                                disabled={isDeleting}
+                              />
+                            </div>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel 
+                                disabled={isDeleting}
+                                onClick={() => {
+                                  setShowOtpInput(false)
+                                  setOtpValue(Array(4).fill(""))
+                                }}
+                              >
+                                Cancel
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={handleDeleteAccount}
+                                disabled={isDeleting || otpValue.join("").length !== 4}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                {isDeleting ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Deleting...
+                                  </>
+                                ) : (
+                                  "Delete Account"
+                                )}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </div>
+                        )}
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </CardFooter>
+                </Card>
+              </motion.div>
             </TabsContent>
           </Tabs>
         </motion.main>
       </div>
-
-      {/* Delete Account Confirmation */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete your account and remove all your data from our
-              servers.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteAccount}
-              disabled={isLoading}
-              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete Account"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* QR Code Dialog */}
       <Dialog open={showQrCode} onOpenChange={setShowQrCode}>
@@ -457,4 +413,3 @@ export default function SettingsPage() {
     </div>
   )
 }
-

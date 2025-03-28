@@ -365,33 +365,38 @@ export async function uploadReceiptImage(file: File): Promise<string> {
   }
 }
 
-// Function to get receipt image as base64
-export async function getReceiptImage(imageReceiptId: string): Promise<string> {
+// Updated function to get receipt image as base64
+export async function getReceiptImage(receiptId: string): Promise<string> {
   try {
-    // Check if token is valid
-    const isValid = await refreshAuthTokenIfNeeded()
-    if (!isValid) {
-      throw new Error("Authentication failed. Please log in again.")
-    }
+    const token = localStorage.getItem("authToken")
 
-    const token = getAuthToken()
     if (!token) {
-      throw new Error("Authentication required")
+      throw new Error("Authentication required. Please log in again.")
     }
 
+    console.log("Fetching image for receipt:", receiptId)
 
+    // Encode the receiptId for the URL
+    const encodedReceiptId = encodeURIComponent(receiptId)
 
-    console.log("Fetching image:", imageReceiptId)
+    const response = await fetch(
+      `https://services.stage.zeropaper.online/api/zpu/receipts/imageBase64?receiptId=${encodedReceiptId}`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      }
+    )
 
-    const response = await authenticatedFetch(`${API_BASE_URL}/receipt/imageBase64?imageReceiptId=${imageReceiptId}`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    })
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`)
+    }
 
-    const data = await handleResponse(response)
+    const data = await response.json()
     return data.imageBase64 || ""
   } catch (error) {
     console.error("Error fetching receipt image:", error)

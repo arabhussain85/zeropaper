@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import {
   Search,
-  MoreVertical,
   Plus,
   Loader2,
   AlertCircle,
@@ -12,23 +11,14 @@ import {
   Wifi,
   WifiOff,
   Download,
-  Trash,
   FileText,
   ArrowUpDown,
 } from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import {
-  getReceiptsByUserId,
-  deleteReceipt,
-  getReceiptImage,
-  getUserId,
-  getAuthToken,
-  type Receipt,
-} from "@/services/receipt-service"
+import { getReceiptsByUserId, deleteReceipt, getReceiptImage, type Receipt } from "@/services/receipt-service"
 import { useToast } from "@/components/ui/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +38,42 @@ import ReceiptDetailModal from "@/components/receipt-detail-modal"
 import { jsPDF } from "jspdf"
 import "jspdf-autotable"
 import Sidebar from "@/components/sidebar"
+
+// Auth helper functions implemented directly in the dashboard page
+function getUserId(): string {
+  if (typeof window === "undefined") return ""
+
+  // Try to get user data from localStorage
+  const userData = localStorage.getItem("userData")
+  if (!userData) {
+    console.error("No user data found in localStorage")
+    return ""
+  }
+
+  try {
+    const user = JSON.parse(userData)
+    if (!user.uid) {
+      console.error("User ID not found in user data:", user)
+      return ""
+    }
+    console.log("Retrieved user ID:", user.uid)
+    return user.uid
+  } catch (error) {
+    console.error("Error parsing user data:", error)
+    return ""
+  }
+}
+
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null
+  const token = localStorage.getItem("authToken") || sessionStorage.getItem("authToken")
+  if (token) {
+    console.log("Retrieved auth token:", token.substring(0, 10) + "..." + token.substring(token.length - 5))
+  } else {
+    console.error("No auth token found")
+  }
+  return token
+}
 
 const categories = [
   {
@@ -219,21 +245,32 @@ export default function DashboardPage() {
     fetchReceipts()
   }
 
-  // Handle delete receipt
   const handleDeleteReceipt = async () => {
     if (!receiptToDelete) return
-
+  
     try {
       setIsDeleting(true)
-      await deleteReceipt(receiptToDelete)
-
+      
+      // Call the deleteReceipt function from the receipt service
+      const response = await deleteReceipt(receiptToDelete)
+  
+      if (!response) {
+        throw new Error("Failed to delete receipt")
+      }
+  
       // Update local state
       setReceipts(receipts.filter((receipt) => receipt.id !== receiptToDelete))
-
+  
       toast({
         title: "Receipt Deleted",
         description: "The receipt has been successfully deleted.",
       })
+  
+      // Close the modal if it was opened from there
+      if (isDetailModalOpen && selectedReceipt?.id === receiptToDelete) {
+        setIsDetailModalOpen(false)
+        setSelectedReceipt(null)
+      }
     } catch (error) {
       console.error("Error deleting receipt:", error)
       toast({
@@ -247,7 +284,6 @@ export default function DashboardPage() {
       setReceiptToDelete(null)
     }
   }
-
   // Confirm delete
   const confirmDelete = (id: string) => {
     setReceiptToDelete(id)
@@ -270,40 +306,270 @@ export default function DashboardPage() {
   const handleDownloadReceiptPDF = (receipt: Receipt) => {
     try {
       const doc = new jsPDF()
-      doc.setFontSize(20)
-      doc.text("Receipt Details", 105, 15, { align: "center" })
-      doc.setFontSize(12)
-      doc.text(`Store: ${receipt.storeName || "N/A"}`, 20, 30)
-      doc.text(`Product: ${receipt.productName || "N/A"}`, 20, 40)
-      doc.text(`Category: ${receipt.category || "N/A"}`, 20, 50)
-      doc.text(`Price: ${receipt.currency || "€"} ${(receipt.price || 0).toFixed(2)}`, 20, 60)
-      doc.text(`Date: ${formatDate(receipt.date)}`, 20, 70)
 
-      if (receipt.validUptoDate) {
-        doc.text(`Valid Until: ${formatDate(receipt.validUptoDate)}`, 20, 80)
+      // Define brand colors and styling variables
+      const primaryColor = "#1B9D65"
+      const secondaryColor = "#F0F0F0"
+      const accentColor = "#0F6A47"
+      const textColor = "#333333"
+      const lightGray = "#F9F9F9"
+      const darkGray = "#555555"
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+
+      // Create a gradient background
+      for (let i = 0; i < pageHeight; i += 3) {
+        const alpha = 0.03 + (i / pageHeight) * 0.05
+        doc.setFillColor(27, 157, 101, alpha)
+        doc.rect(0, i, pageWidth, 3, "F")
       }
+
+      // Add decorative corner elements
+      doc.setFillColor(primaryColor)
+      doc.circle(15, 15, 8, "F")
+      doc.circle(pageWidth - 15, 15, 8, "F")
+      doc.circle(15, pageHeight - 15, 8, "F")
+      doc.circle(pageWidth - 15, pageHeight - 15, 8, "F")
+
+      // Add a subtle border
+      doc.setDrawColor(accentColor)
+      doc.setLineWidth(0.5)
+      doc.roundedRect(10, 10, pageWidth - 20, pageHeight - 20, 3, 3, "S")
+
+      // Add logo with shadow effect
+      const logoUrl =
+        "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Zero%20paper%20user2-05%201-2MhU8cy380KtTq1agohGg6DKTIqtzS.png"
+      // Shadow effect (slightly offset darker rectangle)
+      doc.setFillColor(0, 0, 0, 0.1)
+      doc.roundedRect(77, 17, 60, 20, 2, 2, "F")
+      // Actual logo
+      doc.addImage(logoUrl, "PNG", 75, 15, 60, 20)
+
+      // Add a stylish header
+      doc.setFillColor(primaryColor)
+      doc.roundedRect(10, 40, pageWidth - 20, 15, 2, 2, "F")
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(16)
+      doc.setFont("helvetica", "bold")
+      doc.text("RECEIPT DETAILS", pageWidth / 2, 50, { align: "center" })
+
+      // Add receipt number and date in a stylish box
+      doc.setFillColor(lightGray)
+      doc.roundedRect(pageWidth - 80, 60, 70, 25, 2, 2, "F")
+      doc.setTextColor(primaryColor)
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "bold")
+      doc.text("RECEIPT #", pageWidth - 75, 68)
+      doc.text("DATE", pageWidth - 75, 78)
+      doc.setTextColor(darkGray)
+      doc.setFont("helvetica", "normal")
+      doc.text(receipt.id?.substring(0, 8) || "N/A", pageWidth - 45, 68)
+      doc.text(formatDate(receipt.date), pageWidth - 45, 78)
+
+      // Add store info in a highlighted box
+      doc.setFillColor(primaryColor)
+      doc.setAlpha(0.1)
+      doc.roundedRect(20, 60, pageWidth - 110, 25, 2, 2, "F")
+      doc.setAlpha(1)
+      doc.setTextColor(primaryColor)
+      doc.setFontSize(14)
+      doc.setFont("helvetica", "bold")
+      doc.text(receipt.storeName || "Unknown Store", 25, 70)
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(darkGray)
+      doc.text(receipt.category || "Uncategorized", 25, 78)
+
+      // Add a divider
+      doc.setDrawColor(primaryColor)
+      doc.setLineWidth(0.5)
+      doc.line(20, 90, pageWidth - 20, 90)
+
+      // Receipt Content in a clean, modern layout
+      doc.setTextColor(textColor)
+      doc.setFontSize(12)
+      let yPosition = 100
+      const lineSpacing = 12
+
+      // Product details section
+      doc.setFillColor(lightGray)
+      doc.roundedRect(20, yPosition, pageWidth - 40, 30, 2, 2, "F")
+
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(primaryColor)
+      doc.text("Product Details", 25, yPosition + 10)
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(darkGray)
+      doc.text(`Product Name: ${receipt.productName || "No product name"}`, 25, yPosition + 20)
+
+      yPosition += 40
+
+      // Price section with highlighted box
+      doc.setFillColor(primaryColor)
+      doc.setAlpha(0.1)
+      doc.roundedRect(20, yPosition, pageWidth - 40, 25, 2, 2, "F")
+      doc.setAlpha(1)
+
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(primaryColor)
+      doc.text("Price Information", 25, yPosition + 10)
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(darkGray)
+      doc.text(`Amount: ${receipt.currency || "€"} ${(receipt.price || 0).toFixed(2)}`, 25, yPosition + 20)
+
+      yPosition += 35
+
+      // Additional details section
+      doc.setFillColor(lightGray)
+      doc.roundedRect(20, yPosition, pageWidth - 40, 50, 2, 2, "F")
+
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(primaryColor)
+      doc.text("Additional Information", 25, yPosition + 10)
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(darkGray)
+      let detailsY = yPosition + 20
 
       if (receipt.storeLocation) {
-        doc.text(`Location: ${receipt.storeLocation}`, 20, 90)
+        doc.text(`Store Location: ${receipt.storeLocation}`, 25, detailsY)
+        detailsY += lineSpacing
       }
 
+      if (receipt.validUptoDate) {
+        doc.text(`Valid Until: ${formatDate(receipt.validUptoDate)}`, 25, detailsY)
+        detailsY += lineSpacing
+      }
+
+      if (receipt.refundableUptoDate) {
+        doc.text(`Refundable Until: ${formatDate(receipt.refundableUptoDate)}`, 25, detailsY)
+        detailsY += lineSpacing
+      }
+
+      // Add a QR code for digital verification (simulated)
+      doc.setFillColor(255, 255, 255)
+      doc.roundedRect(pageWidth - 60, yPosition + 5, 40, 40, 2, 2, "F")
+      doc.setDrawColor(darkGray)
+      doc.setLineWidth(0.2)
+      doc.roundedRect(pageWidth - 60, yPosition + 5, 40, 40, 2, 2, "S")
+
+      // Create a simple QR code pattern (just for visual effect)
+      doc.setFillColor(0, 0, 0)
+      const qrX = pageWidth - 55
+      const qrY = yPosition + 10
+      const qrSize = 30
+      const cellSize = 2
+
+      for (let i = 0; i < 15; i++) {
+        for (let j = 0; j < 15; j++) {
+          if (Math.random() > 0.6) {
+            doc.rect(qrX + i * cellSize, qrY + j * cellSize, cellSize, cellSize, "F")
+          }
+        }
+      }
+
+      // Add a footer
+      yPosition = pageHeight - 30
+      doc.setFillColor(primaryColor)
+      doc.rect(0, yPosition, pageWidth, 30, "F")
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(10)
+      doc.text("Generated by Zero Paper - Your Digital Receipt Solution", pageWidth / 2, yPosition + 10, {
+        align: "center",
+      })
+      doc.setFontSize(8)
+      doc.text(`Document generated on ${new Date().toLocaleString()}`, pageWidth / 2, yPosition + 20, {
+        align: "center",
+      })
+
+      // Add receipt image if available on a new page with elegant styling
       if (receipt.imageReceiptId && receiptImages[receipt.imageReceiptId]) {
         try {
           const imgData = `data:image/jpeg;base64,${receiptImages[receipt.imageReceiptId]}`
           doc.addPage()
-          doc.text("Receipt Image", 105, 15, { align: "center" })
-          doc.addImage(imgData, "JPEG", 20, 30, 170, 200)
+
+          // Create a gradient background for the image page
+          for (let i = 0; i < pageHeight; i += 3) {
+            const alpha = 0.03 + (i / pageHeight) * 0.05
+            doc.setFillColor(27, 157, 101, alpha)
+            doc.rect(0, i, pageWidth, 3, "F")
+          }
+
+          // Add decorative corner elements
+          doc.setFillColor(primaryColor)
+          doc.circle(15, 15, 8, "F")
+          doc.circle(pageWidth - 15, 15, 8, "F")
+          doc.circle(15, pageHeight - 15, 8, "F")
+          doc.circle(pageWidth - 15, pageHeight - 15, 8, "F")
+
+          // Add a subtle border
+          doc.setDrawColor(accentColor)
+          doc.setLineWidth(0.5)
+          doc.roundedRect(10, 10, pageWidth - 20, pageHeight - 20, 3, 3, "S")
+
+          // Add a stylish header for the image page
+          doc.setFillColor(primaryColor)
+          doc.roundedRect(10, 20, pageWidth - 20, 15, 2, 2, "F")
+          doc.setTextColor(255, 255, 255)
+          doc.setFontSize(16)
+          doc.setFont("helvetica", "bold")
+          doc.text("RECEIPT IMAGE", pageWidth / 2, 30, { align: "center" })
+
+          // Add a frame for the image
+          doc.setFillColor(255, 255, 255)
+          doc.roundedRect(20, 45, pageWidth - 40, pageHeight - 90, 3, 3, "F")
+          doc.setDrawColor(primaryColor)
+          doc.setLineWidth(1)
+          doc.roundedRect(20, 45, pageWidth - 40, pageHeight - 90, 3, 3, "S")
+
+          // Add the image with proper positioning and sizing
+          doc.addImage(imgData, "JPEG", 25, 50, pageWidth - 50, pageHeight - 100)
+
+          // Add a caption
+          doc.setTextColor(darkGray)
+          doc.setFontSize(10)
+          doc.setFont("helvetica", "italic")
+          doc.text(`Original receipt from ${receipt.storeName}`, pageWidth / 2, pageHeight - 35, { align: "center" })
+
+          // Add the same footer as the first page
+          yPosition = pageHeight - 30
+          doc.setFillColor(primaryColor)
+          doc.rect(0, yPosition, pageWidth, 30, "F")
+          doc.setTextColor(255, 255, 255)
+          doc.setFontSize(10)
+          doc.text("Generated by Zero Paper - Your Digital Receipt Solution", pageWidth / 2, yPosition + 10, {
+            align: "center",
+          })
+          doc.setFontSize(8)
+          doc.text(`Document generated on ${new Date().toLocaleString()}`, pageWidth / 2, yPosition + 20, {
+            align: "center",
+          })
         } catch (imgError) {
           console.error("Error adding image to PDF:", imgError)
         }
       }
 
-      const filename = `receipt-${receipt.id || receipt.storeName}-${new Date().toISOString().split("T")[0]}.pdf`
+      // Add a subtle watermark
+      doc.setTextColor(0, 0, 0, 0.03)
+      doc.setFontSize(60)
+      doc.setFont("helvetica", "bold")
+      doc.text("ZERO PAPER", pageWidth / 2, pageHeight / 2, {
+        align: "center",
+        angle: 45,
+      })
+
+      // Save PDF with a descriptive filename
+      const storeName = receipt.storeName?.replace(/\s+/g, "-").toLowerCase() || "unknown"
+      const timestamp = new Date().toISOString().split("T")[0]
+      const filename = `receipt-${storeName}-${timestamp}.pdf`
       doc.save(filename)
 
       toast({
-        title: "Receipt Downloaded",
-        description: "The receipt has been downloaded as PDF.",
+        title: "Premium Receipt Downloaded",
+        description: "Your beautifully designed receipt has been downloaded as a PDF.",
+        variant: "success",
       })
     } catch (error) {
       console.error("Error downloading receipt as PDF:", error)
@@ -864,7 +1130,6 @@ export default function DashboardPage() {
                           {sortBy === "price" && <ArrowUpDown className="w-4 h-4" />}
                         </div>
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -891,42 +1156,6 @@ export default function DashboardPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           {receipt.currency || "€"} {(receipt.price || 0).toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <span className="sr-only">Open menu</span>
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleDownloadReceiptPDF(receipt)
-                                }}
-                              >
-                                <FileText className="mr-2 h-4 w-4" />
-                                <span>Download PDF</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  confirmDelete(receipt.id || "")
-                                }}
-                                className="text-red-600"
-                              >
-                                <Trash className="mr-2 h-4 w-4" />
-                                <span>Delete</span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
                         </td>
                       </tr>
                     ))}

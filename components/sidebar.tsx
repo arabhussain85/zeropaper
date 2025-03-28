@@ -3,8 +3,9 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Settings, LogOut, Menu, X } from "lucide-react"
+import { LayoutDashboard, Settings, LogOut, Menu, X } from 'lucide-react'
 import { logoutUser } from "@/utils/auth-helpers"
 
 export default function Sidebar() {
@@ -69,17 +70,15 @@ function SidebarContent({
 }) {
   return (
     <>
-      {/* User Info (without ZERO PAPER branding) */}
-      <div className="p-4 border-b">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white">
-            <span className="text-sm font-bold">A</span>
-          </div>
-          <div>
-            <p className="text-sm font-medium">arab hussain</p>
-            <p className="text-xs text-gray-500">arabhussain403@gmail.com</p>
-          </div>
-        </div>
+      {/* Logo instead of user info */}
+      <div className="p-6 border-b flex justify-center bg-[#1B9D65]">
+        <Image
+          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Zero%20paper%20user2-05%201-2MhU8cy380KtTq1agohGg6DKTIqtzS.png"
+          alt="Zero Paper Logo"
+          width={150}
+          height={50}
+          className="h-auto"
+        />
       </div>
 
       {/* Navigation */}
@@ -92,13 +91,6 @@ function SidebarContent({
                 <Link
                   href={item.href}
                   prefetch={true}
-                  onClick={(e) => {
-                    // Ensure navigation happens
-                    if (item.href === "/settings") {
-                      e.preventDefault()
-                      window.location.href = "/settings"
-                    }
-                  }}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive ? "bg-[#1B9D65] text-white" : "hover:bg-gray-100"
                   }`}
@@ -126,4 +118,3 @@ function SidebarContent({
     </>
   )
 }
-

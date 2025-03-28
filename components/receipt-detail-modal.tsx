@@ -94,21 +94,41 @@ export default function ReceiptDetailModal({
             <div className="px-4 pt-4">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="details">Details</TabsTrigger>
-                <TabsTrigger value="image" disabled={!receiptImage}>
-                  Image
-                </TabsTrigger>
+                <TabsTrigger value="image">Image</TabsTrigger>
               </TabsList>
             </div>
 
             <TabsContent value="details" className="p-4 pt-6">
               <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#1B9D65]/10 rounded-lg flex items-center justify-center text-[#1B9D65]">
-                    <Store className="w-5 h-5" />
+                <div className="flex items-center gap-3 justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#1B9D65]/10 rounded-lg flex items-center justify-center text-[#1B9D65]">
+                      <Store className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">{receipt.storeName || "Unknown Store"}</h3>
+                      <p className="text-sm text-gray-500">{receipt.category || "Uncategorized"}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold">{receipt.storeName || "Unknown Store"}</h3>
-                    <p className="text-sm text-gray-500">{receipt.category || "Uncategorized"}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onDownloadPDF(receipt)}
+                      className="text-[#1B9D65] hover:bg-[#1B9D65]/10"
+                      title="Download PDF"
+                    >
+                      <Download className="w-5 h-5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      className="text-red-600 hover:bg-red-50"
+                      title="Delete Receipt"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
                   </div>
                 </div>
 
@@ -173,13 +193,40 @@ export default function ReceiptDetailModal({
             </TabsContent>
 
             <TabsContent value="image" className="p-4 pt-6">
-              {receiptImage ? (
+              <div className="flex justify-end mb-4">
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDownloadPDF(receipt)}
+                    className="text-[#1B9D65] hover:bg-[#1B9D65]/10"
+                    title="Download PDF"
+                  >
+                    <Download className="w-5 h-5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    className="text-red-600 hover:bg-red-50"
+                    title="Delete Receipt"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+
+              {receipt.imageBase64 || receiptImage ? (
                 <div className="flex flex-col items-center">
                   <div className="relative w-full max-w-md mx-auto bg-gray-100 rounded-lg overflow-hidden">
                     <img
-                      src={`data:image/jpeg;base64,${receiptImage}`}
+                      src={`data:image/jpeg;base64,${receipt.imageBase64 || receiptImage}`}
                       alt="Receipt"
                       className="w-full object-contain max-h-[400px]"
+                      onError={(e) => {
+                        console.error("Image failed to load:", e)
+                        e.currentTarget.src = "/placeholder.svg?height=200&width=200"
+                      }}
                     />
                   </div>
                   <p className="text-sm text-gray-500 mt-4">Receipt image for {receipt.storeName}</p>
@@ -195,21 +242,6 @@ export default function ReceiptDetailModal({
               )}
             </TabsContent>
           </Tabs>
-
-          <div className="p-4 border-t flex gap-3 justify-between">
-            <Button
-              variant="outline"
-              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-              onClick={() => setDeleteConfirmOpen(true)}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
-            </Button>
-            <Button onClick={() => onDownloadPDF(receipt)} className="bg-[#1B9D65] hover:bg-[#1B9D65]/90">
-              <Download className="w-4 h-4 mr-2" />
-              Download PDF
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
 
@@ -217,7 +249,10 @@ export default function ReceiptDetailModal({
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Delete Receipt
+            </AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the receipt from your account.
             </AlertDialogDescription>
