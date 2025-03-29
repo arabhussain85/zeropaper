@@ -365,7 +365,6 @@ export async function uploadReceiptImage(file: File): Promise<string> {
   }
 }
 
-// Updated function to get receipt image as base64
 export async function getReceiptImage(receiptId: string): Promise<string> {
   try {
     const token = localStorage.getItem("authToken")
@@ -389,7 +388,7 @@ export async function getReceiptImage(receiptId: string): Promise<string> {
           "Content-Type": "application/json",
         },
         cache: "no-store",
-      }
+      },
     )
 
     if (!response.ok) {
@@ -397,6 +396,7 @@ export async function getReceiptImage(receiptId: string): Promise<string> {
     }
 
     const data = await response.json()
+    console.log("Image data received:", data && data.imageBase64 ? "Yes (with data)" : "Yes (but empty)")
     return data.imageBase64 || ""
   } catch (error) {
     console.error("Error fetching receipt image:", error)

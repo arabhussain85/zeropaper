@@ -2,18 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import {
-  Search,
-  Plus,
-  Loader2,
-  AlertCircle,
-  RefreshCw,
-  Wifi,
-  WifiOff,
-  Download,
-  FileText,
-  ArrowUpDown,
-} from "lucide-react"
+import { Search, Plus, Loader2, AlertCircle, RefreshCw, Wifi, WifiOff, Download, ArrowUpDown } from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { getReceiptsByUserId, deleteReceipt, getReceiptImage, type Receipt } from "@/services/receipt-service"
@@ -120,10 +109,9 @@ export default function DashboardPage() {
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [receiptImages, setReceiptImages] = useState<Record<string, string>>({})
-  const [isDownloadingAll, setIsDownloadingAll] = useState(false)
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false)
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
-  const [isDownloadingZip, setIsDownloadingZip] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -198,13 +186,17 @@ export default function DashboardPage() {
 
       // Fetch images for receipts that have imageReceiptId
       const imagePromises = data
-        .filter((receipt) => receipt.imageReceiptId)
+        .filter((receipt) => receipt.id) // Use receipt.id instead of imageReceiptId
         .map(async (receipt) => {
           try {
-            if (receipt.imageReceiptId) {
-              const imageBase64 = await getReceiptImage(receipt.imageReceiptId)
+            if (receipt.id) {
+              console.log(`Fetching image for receipt ID: ${receipt.id}`)
+              const imageBase64 = await getReceiptImage(receipt.id)
               if (imageBase64) {
-                return { id: receipt.imageReceiptId, base64: imageBase64 }
+                console.log(`Successfully fetched image for receipt ID: ${receipt.id}`)
+                return { id: receipt.id, base64: imageBase64 }
+              } else {
+                console.log(`No image data returned for receipt ID: ${receipt.id}`)
               }
             }
             return null
@@ -223,6 +215,7 @@ export default function DashboardPage() {
         }
       })
 
+      console.log(`Loaded ${Object.keys(imageMap).length} receipt images`)
       setReceiptImages(imageMap)
     } catch (error) {
       console.error("Error fetching receipts:", error)
@@ -245,27 +238,26 @@ export default function DashboardPage() {
     fetchReceipts()
   }
 
+  // Handle delete receipt
   const handleDeleteReceipt = async () => {
     if (!receiptToDelete) return
-  
+
     try {
       setIsDeleting(true)
-      
-      // Call the deleteReceipt function from the receipt service
       const response = await deleteReceipt(receiptToDelete)
-  
-      if (!response) {
-        throw new Error("Failed to delete receipt")
+
+      if (!response || !response.success) {
+        throw new Error("Failed to delete receipt from server")
       }
-  
+
       // Update local state
       setReceipts(receipts.filter((receipt) => receipt.id !== receiptToDelete))
-  
+
       toast({
         title: "Receipt Deleted",
         description: "The receipt has been successfully deleted.",
       })
-  
+
       // Close the modal if it was opened from there
       if (isDetailModalOpen && selectedReceipt?.id === receiptToDelete) {
         setIsDetailModalOpen(false)
@@ -284,6 +276,7 @@ export default function DashboardPage() {
       setReceiptToDelete(null)
     }
   }
+
   // Confirm delete
   const confirmDelete = (id: string) => {
     setReceiptToDelete(id)
@@ -291,8 +284,30 @@ export default function DashboardPage() {
   }
 
   // Handle opening receipt detail modal
-  const handleOpenReceiptDetail = (receipt: Receipt) => {
+  const handleOpenReceiptDetail = async (receipt: Receipt) => {
     setSelectedReceipt(receipt)
+
+    // Fetch the image if we don't have it yet
+    if (receipt.id && !receiptImages[receipt.id]) {
+      try {
+        console.log(`Fetching image for receipt ID: ${receipt.id} before opening modal`)
+        const imageBase64 = await getReceiptImage(receipt.id)
+        if (imageBase64) {
+          console.log(`Successfully fetched image for receipt ID: ${receipt.id}`)
+          setReceiptImages((prev) => ({
+            ...prev,
+            [receipt.id!]: imageBase64,
+          }))
+        } else {
+          console.log(`No image data returned for receipt ID: ${receipt.id}`)
+        }
+      } catch (error) {
+        console.error(`Error fetching image for receipt ${receipt.id}:`, error)
+      }
+    } else if (receipt.id) {
+      console.log(`Using cached image for receipt ID: ${receipt.id}`)
+    }
+
     setIsDetailModalOpen(true)
   }
 
@@ -317,12 +332,9 @@ export default function DashboardPage() {
       const pageWidth = doc.internal.pageSize.getWidth()
       const pageHeight = doc.internal.pageSize.getHeight()
 
-      // Create a gradient background
-      for (let i = 0; i < pageHeight; i += 3) {
-        const alpha = 0.03 + (i / pageHeight) * 0.05
-        doc.setFillColor(27, 157, 101, alpha)
-        doc.rect(0, i, pageWidth, 3, "F")
-      }
+      // Set white background
+      doc.setFillColor(255, 255, 255)
+      doc.rect(0, 0, pageWidth, pageHeight, "F")
 
       // Add decorative corner elements
       doc.setFillColor(primaryColor)
@@ -367,10 +379,8 @@ export default function DashboardPage() {
       doc.text(formatDate(receipt.date), pageWidth - 45, 78)
 
       // Add store info in a highlighted box
-      doc.setFillColor(primaryColor)
-      doc.setAlpha(0.1)
+      doc.setFillColor(lightGray)
       doc.roundedRect(20, 60, pageWidth - 110, 25, 2, 2, "F")
-      doc.setAlpha(1)
       doc.setTextColor(primaryColor)
       doc.setFontSize(14)
       doc.setFont("helvetica", "bold")
@@ -406,10 +416,8 @@ export default function DashboardPage() {
       yPosition += 40
 
       // Price section with highlighted box
-      doc.setFillColor(primaryColor)
-      doc.setAlpha(0.1)
+      doc.setFillColor(lightGray)
       doc.roundedRect(20, yPosition, pageWidth - 40, 25, 2, 2, "F")
-      doc.setAlpha(1)
 
       doc.setFont("helvetica", "bold")
       doc.setTextColor(primaryColor)
@@ -485,17 +493,14 @@ export default function DashboardPage() {
       })
 
       // Add receipt image if available on a new page with elegant styling
-      if (receipt.imageReceiptId && receiptImages[receipt.imageReceiptId]) {
+      if (receipt.id && receiptImages[receipt.id]) {
         try {
-          const imgData = `data:image/jpeg;base64,${receiptImages[receipt.imageReceiptId]}`
+          const imgData = `data:image/jpeg;base64,${receiptImages[receipt.id]}`
           doc.addPage()
 
-          // Create a gradient background for the image page
-          for (let i = 0; i < pageHeight; i += 3) {
-            const alpha = 0.03 + (i / pageHeight) * 0.05
-            doc.setFillColor(27, 157, 101, alpha)
-            doc.rect(0, i, pageWidth, 3, "F")
-          }
+          // Set white background for the image page
+          doc.setFillColor(255, 255, 255)
+          doc.rect(0, 0, pageWidth, pageHeight, "F")
 
           // Add decorative corner elements
           doc.setFillColor(primaryColor)
@@ -567,8 +572,8 @@ export default function DashboardPage() {
       doc.save(filename)
 
       toast({
-        title: "Premium Receipt Downloaded",
-        description: "Your beautifully designed receipt has been downloaded as a PDF.",
+        title: "Receipt Downloaded",
+        description: "Your receipt has been downloaded as a PDF.",
         variant: "success",
       })
     } catch (error) {
@@ -578,61 +583,6 @@ export default function DashboardPage() {
         description: "Failed to download receipt as PDF. Please try again.",
         variant: "destructive",
       })
-    }
-  }
-
-  // Handle download all receipts as PDF
-  const handleDownloadAllPDF = async () => {
-    try {
-      setIsDownloadingAll(true)
-      const doc = new jsPDF()
-      doc.setFontSize(20)
-      doc.text("All Receipts", 105, 15, { align: "center" })
-      doc.setFontSize(10)
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, 22, { align: "center" })
-
-      const tableColumn = ["Receipt #", "Store", "Product", "Category", "Price", "Date"]
-      const tableRows = filteredReceipts.map((receipt, index) => [
-        `#${index + 1}`,
-        receipt.storeName || "N/A",
-        receipt.productName || "N/A",
-        receipt.category || "N/A",
-        `${receipt.currency || "€"} ${(receipt.price || 0).toFixed(2)}`,
-        formatDate(receipt.date),
-      ])
-
-      // @ts-ignore - jsPDF-AutoTable types are not properly recognized
-      doc.autoTable({
-        head: [tableColumn],
-        body: tableRows,
-        startY: 30,
-        styles: { fontSize: 10, cellPadding: 3 },
-        headStyles: { fillColor: [27, 157, 101] },
-      })
-
-      const totalValue = filteredReceipts.reduce((sum, receipt) => sum + (receipt.price || 0), 0).toFixed(2)
-      const currency = filteredReceipts.length > 0 ? filteredReceipts[0]?.currency || "€" : "€"
-
-      // @ts-ignore - jsPDF-AutoTable types are not properly recognized
-      const finalY = (doc as any).lastAutoTable.finalY || 30
-      doc.setFontSize(12)
-      doc.text(`Total: ${currency} ${totalValue}`, 195, finalY + 10, { align: "right" })
-
-      doc.save(`all-receipts-${new Date().toISOString().split("T")[0]}.pdf`)
-
-      toast({
-        title: "All Receipts Downloaded",
-        description: "All receipts have been downloaded as PDF.",
-      })
-    } catch (error) {
-      console.error("Error downloading all receipts as PDF:", error)
-      toast({
-        title: "Download Failed",
-        description: "Failed to download all receipts as PDF. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsDownloadingAll(false)
     }
   }
 
@@ -845,9 +795,23 @@ export default function DashboardPage() {
     }
   }
 
-  // Calculate total value of filtered receipts
-  const totalValue = filteredReceipts.reduce((sum, receipt) => sum + (receipt.price || 0), 0).toFixed(2)
-  const currency = filteredReceipts.length > 0 ? filteredReceipts[0]?.currency || "€" : "€"
+  // Calculate totals by currency
+  const totalsByCurrency = filteredReceipts.reduce(
+    (acc, receipt) => {
+      const currency = receipt.currency || "€"
+      if (!acc[currency]) {
+        acc[currency] = 0
+      }
+      acc[currency] += receipt.price || 0
+      return acc
+    },
+    {} as Record<string, number>,
+  )
+
+  // Format the totals by currency for display
+  const formattedTotalsByCurrency = Object.entries(totalsByCurrency).map(([currency, total]) => {
+    return { currency, total: total.toFixed(2) }
+  })
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -1058,23 +1022,20 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Summary */}
           {!isLoading && filteredReceipts.length > 0 && (
-            <motion.div className="flex justify-between items-center mb-6" variants={itemVariants}>
+            <motion.div
+              className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4"
+              variants={itemVariants}
+            >
               <h2 className="text-xl font-semibold">{filteredReceipts.length} Receipts</h2>
-              <div className="flex items-center gap-3">
-                <p className="text-xl font-semibold">
-                  Total: {currency}
-                  {totalValue}
-                </p>
-                <Button variant="outline" size="sm" onClick={handleDownloadAllPDF} disabled={isDownloadingAll}>
-                  {isDownloadingAll ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <FileText className="w-4 h-4 mr-2" />
-                  )}
-                  {isDownloadingAll ? "Generating..." : "Download PDF"}
-                </Button>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-col gap-1">
+                  {formattedTotalsByCurrency.map(({ currency, total }) => (
+                    <p key={currency} className="text-lg font-semibold">
+                      Total {currency}: {total}
+                    </p>
+                  ))}
+                </div>
               </div>
             </motion.div>
           )}
@@ -1084,7 +1045,7 @@ export default function DashboardPage() {
             <motion.div className="bg-white rounded-lg shadow overflow-hidden" variants={itemVariants}>
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50 text-gray-700">
+                  <thead className="bg-white border-b text-black">
                     <tr>
                       <th
                         className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer"
@@ -1132,29 +1093,24 @@ export default function DashboardPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white divide-y divide-gray-100">
                     {filteredReceipts.map((receipt, index) => (
                       <tr
                         key={receipt.id || index}
                         className="hover:bg-gray-50 cursor-pointer"
                         onClick={() => handleOpenReceiptDetail(receipt)}
                       >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{index + 1}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-black">#{index + 1}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-black">
                           <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 flex items-center justify-center rounded-full bg-[#1B9D65]/10 text-[#1B9D65]">
-                              {getCategoryEmoji(receipt.category)}
-                            </span>
                             <span>{receipt.storeName || "Unknown Store"}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-black">
                           {receipt.productName || "No product name"}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(receipt.date)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-black">{formatDate(receipt.date)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-black">
                           {receipt.currency || "€"} {(receipt.price || 0).toFixed(2)}
                         </td>
                       </tr>
@@ -1223,7 +1179,7 @@ export default function DashboardPage() {
           {/* Receipt Detail Modal */}
           <ReceiptDetailModal
             receipt={selectedReceipt}
-            receiptImage={selectedReceipt?.imageReceiptId ? receiptImages[selectedReceipt.imageReceiptId] : null}
+            receiptImage={selectedReceipt?.id ? receiptImages[selectedReceipt.id] : null}
             isOpen={isDetailModalOpen}
             onClose={handleCloseReceiptDetail}
             onDelete={(id) => {
