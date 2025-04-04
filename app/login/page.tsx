@@ -1,109 +1,143 @@
-"use client";
+"use client"
 
-import type React from "react";
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import Link from "next/link";
-import { useToast } from "@/components/ui/use-toast";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { loginUser } from "@/services/api-wrapper";
-import { setAuthToken } from "@/utils/auth-helpers";
+import type React from "react"
+import { useState, useEffect } from "react"
+import { motion } from "framer-motion"
+import { Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react"
+import { useRouter } from "next/navigation"
+import Image from "next/image"
+import Link from "next/link"
+import { useToast } from "@/components/ui/use-toast"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { loginUser } from "@/services/api-wrapper"
+import { setAuthToken } from "@/utils/auth-helpers"
+import VersionDisplay from "@/components/version-display"
+
+// Add a full-screen loader component at the top of the file, after the imports
+const FullScreenLoader = () => (
+  <div className="fixed inset-0 bg-[#1B9D65]/90 flex flex-col items-center justify-center z-50">
+    <div className="w-24 h-24 relative mb-8">
+      <Image
+        src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Zero%20paper%20user2-05%201-2MhU8cy380KtTq1agohGg6DKTIqtzS.png"
+        alt="Zero Paper Logo"
+        fill
+        className="object-contain animate-pulse"
+      />
+    </div>
+    <div className="w-48 h-1 bg-white/30 rounded-full overflow-hidden">
+      <div className="h-full bg-white animate-[loader_1.5s_ease-in-out_infinite]" />
+    </div>
+    <p className="mt-6 text-lg font-medium text-white">Logging in...</p>
+    <style jsx global>{`
+      @keyframes loader {
+        0% { width: 0%; margin-left: 0; }
+        50% { width: 100%; margin-left: 0; }
+        100% { width: 0%; margin-left: 100%; }
+      }
+    `}</style>
+  </div>
+)
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
-  const { toast } = useToast();
-  const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
+  const { toast } = useToast()
+  const router = useRouter()
 
   // Clear debug info after 10 seconds
   useEffect(() => {
     if (debugInfo) {
       const timer = setTimeout(() => {
-        setDebugInfo(null);
-      }, 10000);
-      return () => clearTimeout(timer);
+        setDebugInfo(null)
+      }, 10000)
+      return () => clearTimeout(timer)
     }
-  }, [debugInfo]);
+  }, [debugInfo])
 
+  // Ensure the loader appears immediately when login is attempted
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setDebugInfo(null);
-    setIsLoading(true);
+    e.preventDefault()
+    setError(null)
+    setDebugInfo(null)
+    setIsLoading(true)
+    document.body.style.overflow = "hidden" // Prevent scrolling while loading
 
     try {
-      setDebugInfo("Attempting login...");
+      setDebugInfo("Attempting login...")
 
-      const result = await loginUser({ email, password });
-      console.log("Login result:", result); // Debug the response
+      const result = await loginUser({ email, password })
+      console.log("Login result:", result) // Debug the response
 
       if (result.success) {
         // Use the auth helper to store token and user data
         if (result.token) {
           // Remember me is hardcoded to true for now - could be added as a checkbox option later
-          const rememberMe = true;
+          const rememberMe = true
           const loginData = {
             refreshToken: result.refreshToken,
-            user: result.user
-          };
-          
+            user: result.user,
+          }
+
           // Use the auth helper to set tokens and user data
-          const tokenSet = setAuthToken(result.token, rememberMe, loginData);
-          
+          const tokenSet = setAuthToken(result.token, rememberMe, loginData)
+
           if (tokenSet) {
-            setDebugInfo(`Login successful. Token received and stored. Validating token before redirect...`);
-            
+            setDebugInfo(`Login successful. Token received and stored. Validating token before redirect...`)
+
             // Validate the token is properly stored and valid
-            const token = localStorage.getItem("authToken") || sessionStorage.getItem("authToken");
+            const token = localStorage.getItem("authToken") || sessionStorage.getItem("authToken")
             if (token) {
               toast({
                 title: "Success!",
                 description: "You have successfully logged in.",
-              });
-              
+              })
+
               // Use a direct window location change for more reliable redirection
               setTimeout(() => {
-                window.location.href = "/dashboard";
-              }, 1000);
+                window.location.href = "/dashboard"
+              }, 1000)
             } else {
               // If token is missing after setting, show error
-              setError("Authentication failed. Token could not be stored.");
+              setError("Authentication failed. Token could not be stored.")
             }
           } else {
-            setError("Failed to store authentication token.");
+            setError("Failed to store authentication token.")
           }
         } else {
-          setDebugInfo(`Login successful but no token received. This is unusual.`);
-          setError("No authentication token received from server.");
+          setDebugInfo(`Login successful but no token received. This is unusual.`)
+          setError("No authentication token received from server.")
         }
       } else {
-        setError(result.message || "Login failed. Please check your credentials.");
-        setDebugInfo("Login failed: " + result.message);
+        setError(result.message || "Login failed. Please check your credentials.")
+        setDebugInfo("Login failed: " + result.message)
       }
     } catch (error) {
       if (error instanceof Error) {
-        setError(error.message);
-        setDebugInfo("Error: " + error.message);
+        setError(error.message)
+        setDebugInfo("Error: " + error.message)
       } else {
-        setError("An unexpected error occurred. Please try again.");
-        setDebugInfo("Unknown error occurred");
+        setError("An unexpected error occurred. Please try again.")
+        setDebugInfo("Unknown error occurred")
       }
     } finally {
-      setIsLoading(false);
+      // Only hide the loader on error, not on success
+      // This ensures the loader stays visible during redirect
+      if (error) {
+        setIsLoading(false)
+        document.body.style.overflow = ""
+      }
     }
-  };
+  }
 
   return (
     <div className="min-h-screen bg-[#1B9D65] flex items-center justify-center p-4">
+      {isLoading && <FullScreenLoader />}
       <div className="w-full max-w-md">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -163,8 +197,8 @@ export default function LoginPage() {
                 className="h-12 bg-gray-50"
                 value={email}
                 onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (error) setError(null);
+                  setEmail(e.target.value)
+                  if (error) setError(null)
                 }}
               />
             </div>
@@ -187,8 +221,8 @@ export default function LoginPage() {
                   className="h-12 bg-gray-50 pr-12"
                   value={password}
                   onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (error) setError(null);
+                    setPassword(e.target.value)
+                    if (error) setError(null)
                   }}
                 />
                 <button
@@ -206,17 +240,8 @@ export default function LoginPage() {
               disabled={isLoading}
               className="w-full h-12 bg-[#1B9D65] text-white rounded-lg font-medium hover:bg-[#1B9D65]/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Logging in...
-                </>
-              ) : (
-                <>
-                  LOGIN
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              LOGIN
+              <ArrowRight className="w-4 h-4" />
             </Button>
           </form>
 
@@ -229,8 +254,10 @@ export default function LoginPage() {
               </Link>
             </p>
           </div>
+          <VersionDisplay />
         </motion.div>
       </div>
     </div>
-  );
+  )
 }
+

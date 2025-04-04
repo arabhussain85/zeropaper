@@ -20,27 +20,55 @@ import {
   Loader2,
   AlertCircle,
   ImageIcon,
-  X,
+  File,
+  FileText,
+  Edit,
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import MultiFileUpload from "@/components/multi-file-upload"
+
+// Define the Receipt type
+interface Receipt {
+  id?: string
+  storeName?: string
+  productName?: string
+  currency?: string
+  price?: number
+  storeLocation?: string
+  date?: string
+  validUptoDate?: string
+  refundableUptoDate?: string
+  receiptType?: string
+  notes?: string
+  category?: string
+}
 
 interface AddReceiptDialogProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
   initialCategory?: string
+  editReceipt?: Receipt | null
 }
 
-export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCategory }: AddReceiptDialogProps) {
+export default function AddReceiptDialog({
+  isOpen,
+  onClose,
+  onSuccess,
+  initialCategory,
+  editReceipt,
+}: AddReceiptDialogProps) {
   const [step, setStep] = useState(1)
   const [category, setCategory] = useState(initialCategory || "business")
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+
+  // Replace single file state with multiple files state
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [imageUploaded, setImageUploaded] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -53,35 +81,72 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
     validUptoDate: "",
     refundableUptoDate: "",
     receiptType: "manual",
+    notes: "",
   })
 
   const { toast } = useToast()
 
-  // Reset form when dialog opens
+  // Reset form when dialog opens and handle edit mode
   useEffect(() => {
     if (isOpen) {
-      setStep(1)
-      setCategory(initialCategory || "business")
-      setAgreedToTerms(false)
-      setIsLoading(false)
-      setError(null)
-      setSuccess(false)
-      setSelectedFile(null)
-      setImagePreview(null)
-      setImageUploaded(false)
-      setFormData({
-        storeName: "",
-        productName: "",
-        currency: "USD",
-        price: "",
-        storeLocation: "",
-        date: new Date().toISOString().split("T")[0],
-        validUptoDate: "",
-        refundableUptoDate: "",
-        receiptType: "manual",
-      })
+      // Check if we're in edit mode
+      if (editReceipt) {
+        setIsEditMode(true)
+
+        // Pre-populate form with receipt data
+        setFormData({
+          storeName: editReceipt.storeName || "",
+          productName: editReceipt.productName || "",
+          currency: editReceipt.currency || "USD",
+          price: editReceipt.price ? editReceipt.price.toString() : "",
+          storeLocation: editReceipt.storeLocation || "",
+          date: editReceipt.date
+            ? new Date(editReceipt.date).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0],
+          validUptoDate: editReceipt.validUptoDate
+            ? new Date(editReceipt.validUptoDate).toISOString().split("T")[0]
+            : "",
+          refundableUptoDate: editReceipt.refundableUptoDate
+            ? new Date(editReceipt.refundableUptoDate).toISOString().split("T")[0]
+            : "",
+          receiptType: editReceipt.receiptType || "manual",
+          notes: editReceipt.notes || "",
+        })
+
+        // Set category from receipt
+        setCategory(editReceipt.category || initialCategory || "business")
+
+        // Skip to step 3 (purchase details) when editing
+        setStep(3)
+
+        // Auto-agree to terms when editing
+        setAgreedToTerms(true)
+      } else {
+        // Reset form for new receipt
+        setIsEditMode(false)
+        setStep(1)
+        setCategory(initialCategory || "business")
+        setAgreedToTerms(false)
+        setIsLoading(false)
+        setError(null)
+        setSuccess(false)
+        setSelectedFiles([])
+        setImageUploaded(false)
+        setFormData({
+          storeName: "",
+          productName: "",
+          currency: "USD",
+          price: "",
+          storeLocation: "",
+          date: new Date().toISOString().split("T")[0],
+          validUptoDate: "",
+          refundableUptoDate: "",
+          receiptType: "manual",
+          notes: "",
+        })
+      }
     }
-  }, [isOpen, initialCategory])
+  }, [isOpen, initialCategory, editReceipt])
 
   const handleNext = () => {
     setError(null)
@@ -111,48 +176,11 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
     if (error) setError(null)
   }
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
-      setSelectedFile(file)
-      setImageUploaded(true)
-
-      try {
-        const base64 = await fileToBase64(file)
-        setImagePreview(`data:${file.type};base64,${base64}`)
-      } catch (err) {
-        console.error("Error creating preview:", err)
-      }
-
-      if (error) setError(null)
-    }
-  }
-
-  const handlePrepareImage = async () => {
-    if (!selectedFile) return
-
-    try {
-      setIsLoading(true)
-      setError(null)
-
-      const base64 = await fileToBase64(selectedFile)
-      setImagePreview(`data:${selectedFile.type};base64,${base64}`)
-      setImageUploaded(true)
-
-      toast({
-        title: "Image Prepared",
-        description: "Receipt image is ready to be uploaded with your receipt.",
-      })
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to prepare image")
-      toast({
-        title: "Preparation Failed",
-        description: "Failed to prepare receipt image.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
+  // Update file handling to support multiple files
+  const handleFilesSelected = (files: File[]) => {
+    setSelectedFiles(files)
+    setImageUploaded(files.length > 0)
+    if (error) setError(null)
   }
 
   const handleSubmit = async () => {
@@ -203,24 +231,40 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
 
         return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`
       }
-      let imageBase64 = null
-      console.log("Selected File : " + selectedFile?.size)
-      if (selectedFile && imageUploaded) {
-        console.log("image is being uploaded")
+
+      // Process the primary image (first image) if available
+      let primaryImageBase64 = null
+      if (selectedFiles.length > 0) {
         try {
-          imageBase64 = await fileToBase64(selectedFile)
-          console.log("imageBase64:", imageBase64) // Debugging line to check the output
+          primaryImageBase64 = await fileToBase64(selectedFiles[0])
+          console.log("Primary image processed")
         } catch (error) {
-          console.error("Error converting file to base64:", error)
-          setError("Failed to convert image to base64")
+          console.error("Error converting primary file to base64:", error)
+          setError("Failed to convert primary image to base64")
           setIsLoading(false)
           return
         }
       }
 
+      // Prepare additional images if available
+      const additionalImagesBase64 = []
+      if (selectedFiles.length > 1) {
+        try {
+          // Process additional images (skip the first one as it's the primary)
+          for (let i = 1; i < selectedFiles.length; i++) {
+            const base64 = await fileToBase64(selectedFiles[i])
+            additionalImagesBase64.push(base64)
+          }
+          console.log(`Processed ${additionalImagesBase64.length} additional images`)
+        } catch (error) {
+          console.error("Error converting additional files to base64:", error)
+          // Continue with the primary image even if additional images fail
+        }
+      }
+
       const receiptData = {
-        // formDataEncoded.append("imageBase64", 'base64,'+imageBase64);
-        imageBase64: imageBase64,
+        imageBase64: primaryImageBase64,
+        additionalImages: additionalImagesBase64.length > 0 ? JSON.stringify(additionalImagesBase64) : undefined,
         price: Number.parseFloat(formData.price),
         productName: formData.productName,
         addedDate: formatDate(formData.date),
@@ -234,6 +278,13 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
         validUptoDate: formatDate(formData.validUptoDate),
         currency: formData.currency,
         receiptType: formData.receiptType,
+        fileCount: selectedFiles.length,
+        notes: formData.notes,
+      }
+
+      // If editing, add the receipt ID
+      if (isEditMode && editReceipt?.id) {
+        receiptData.id = editReceipt.id
       }
 
       // Submit receipt with image if available
@@ -244,8 +295,13 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
         }
       }
 
-      const response = await fetch("https://services.stage.zeropaper.online/api/zpu/receipts/add", {
-        method: "POST",
+      // Use the appropriate endpoint based on whether we're adding or updating
+      const endpoint = isEditMode
+        ? `https://services.stage.zeropaper.online/api/zpu/receipts/update?id=${editReceipt?.id}`
+        : "https://services.stage.zeropaper.online/api/zpu/receipts/add"
+
+      const response = await fetch(endpoint, {
+        method: isEditMode ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           Authorization: `Bearer ${getAuthToken()}`,
@@ -255,14 +311,14 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to add receipt")
+        throw new Error(errorData.error || `Failed to ${isEditMode ? "update" : "add"} receipt`)
       }
 
       const data = await response.json()
       setSuccess(true)
       toast({
-        title: "Receipt Added",
-        description: "Your receipt has been added successfully.",
+        title: isEditMode ? "Receipt Updated" : "Receipt Added",
+        description: `Your receipt with ${selectedFiles.length} file(s) has been ${isEditMode ? "updated" : "added"} successfully.`,
       })
 
       if (onSuccess) {
@@ -275,10 +331,10 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
         onClose()
       }, 2000)
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to add receipt")
+      setError(error instanceof Error ? error.message : `Failed to ${isEditMode ? "update" : "add"} receipt`)
       toast({
         title: "Error",
-        description: "Failed to add receipt. Please try again.",
+        description: `Failed to ${isEditMode ? "update" : "add"} receipt. Please try again.`,
         variant: "destructive",
       })
     } finally {
@@ -316,6 +372,17 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
     }
   }
 
+  // Get file type icon
+  const getFileIcon = (file: File) => {
+    if (file.type.startsWith("image/")) {
+      return <ImageIcon className="w-5 h-5 text-blue-500" />
+    } else if (file.type === "application/pdf") {
+      return <FileText className="w-5 h-5 text-red-500" />
+    } else {
+      return <File className="w-5 h-5 text-gray-500" />
+    }
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md p-0 max-h-[90vh] overflow-auto">
@@ -340,20 +407,22 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
                 animate={{ rotate: 0, scale: 1 }}
                 transition={{ delay: 0.2 }}
               >
-                {getStepIcon()}
+                {isEditMode ? <Edit className="w-6 h-6" /> : getStepIcon()}
               </motion.div>
-              Add Receipt
+              {isEditMode ? "Edit Receipt" : "Add Receipt"}
             </DialogTitle>
           </div>
-          {/* Progress bar */}
-          <div className="h-1 bg-white/20 rounded-full mt-4">
-            <motion.div
-              className="h-full bg-white rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${(step / 4) * 100}%` }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-            />
-          </div>
+          {/* Progress bar - only show in add mode */}
+          {!isEditMode && (
+            <div className="h-1 bg-white/20 rounded-full mt-4">
+              <motion.div
+                className="h-full bg-white rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${(step / 4) * 100}%` }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              />
+            </div>
+          )}
         </motion.div>
 
         <div className="p-6">
@@ -369,12 +438,12 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
           {success && (
             <Alert className="mb-6 bg-green-50 text-green-800 border-green-200">
               <Check className="h-4 w-4" />
-              <AlertDescription>Receipt added successfully!</AlertDescription>
+              <AlertDescription>Receipt {isEditMode ? "updated" : "added"} successfully!</AlertDescription>
             </Alert>
           )}
 
           <AnimatePresence mode="wait" custom={step}>
-            {step === 1 && (
+            {step === 1 && !isEditMode && (
               <motion.div
                 key="step1"
                 custom={1}
@@ -443,98 +512,40 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 className="space-y-4"
               >
-                <motion.h2 className="text-xl font-semibold">Upload Image (Optional)</motion.h2>
-                <motion.div
-                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                    imageUploaded ? "border-[#1B9D65] bg-[#1B9D65]/5" : "border-gray-200 hover:border-[#1B9D65]"
-                  }`}
-                  onClick={() => document.getElementById("receipt-image")?.click()}
-                  whileHover={{ scale: 1.02, boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}
-                  whileTap={{ scale: 0.98 }}
+                <motion.h2 className="text-xl font-semibold">Upload Files (Optional)</motion.h2>
+                <motion.p
+                  className="text-sm text-gray-600"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
                 >
-                  <input
-                    type="file"
-                    id="receipt-image"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-                  <div className="flex flex-col items-center gap-2">
-                    {imagePreview ? (
-                      <div className="relative w-full max-w-xs mx-auto">
-                        <img
-                          src={imagePreview || "/placeholder.svg"}
-                          alt="Receipt preview"
-                          className="max-h-48 max-w-full mx-auto rounded-lg object-contain"
-                        />
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setSelectedFile(null)
-                            setImagePreview(null)
-                            setImageUploaded(false)
-                          }}
-                          className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <motion.div
-                        className={`p-3 rounded-full ${imageUploaded ? "bg-[#1B9D65] text-white" : "bg-[#1B9D65]/10 text-[#1B9D65]"}`}
-                        initial={{ scale: 1 }}
-                        animate={{
-                          scale: [1, 1.1, 1],
-                          rotate: imageUploaded ? [0, 360] : 0,
-                        }}
-                        transition={{
-                          duration: 0.5,
-                          ease: "easeInOut",
-                          times: [0, 0.5, 1],
-                          repeat: imageUploaded ? 0 : Number.POSITIVE_INFINITY,
-                          repeatDelay: 3,
-                        }}
-                      >
-                        {imageUploaded ? <Check className="w-6 h-6" /> : <ImageIcon className="w-6 h-6" />}
-                      </motion.div>
-                    )}
-                    <p className={imageUploaded ? "text-[#1B9D65] font-medium" : "text-gray-600"}>
-                      {imageUploaded ? "Image Uploaded" : selectedFile ? "Change Image" : "Upload Image"}
+                  Upload images of your receipt or related documents. You can upload multiple files.
+                </motion.p>
+
+                {/* Replace the old file upload with MultiFileUpload component */}
+                <MultiFileUpload
+                  onFilesSelected={handleFilesSelected}
+                  maxFiles={5}
+                  acceptedFileTypes="image/*,application/pdf"
+                  maxSizeInMB={10}
+                />
+
+                {/* Show selected files count */}
+                {selectedFiles.length > 0 && (
+                  <motion.div
+                    className="mt-4 p-3 bg-[#1B9D65]/5 rounded-lg border border-[#1B9D65]/20"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <p className="text-sm font-medium text-[#1B9D65]">
+                      {selectedFiles.length} file{selectedFiles.length !== 1 ? "s" : ""} selected
                     </p>
-                    {selectedFile && !imageUploaded && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-2">
-                        <p className="text-sm text-gray-500 mb-2">Selected: {selectedFile.name}</p>
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handlePrepareImage()
-                          }}
-                          disabled={isLoading}
-                          className="bg-[#1B9D65] hover:bg-[#1B9D65]/90"
-                        >
-                          {isLoading ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Preparing...
-                            </>
-                          ) : (
-                            "Prepare Image"
-                          )}
-                        </Button>
-                      </motion.div>
-                    )}
-                    {imageUploaded && (
-                      <motion.p
-                        className="text-sm text-gray-500 mt-2"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                      >
-                        Image ready to upload with receipt
-                      </motion.p>
-                    )}
-                  </div>
-                </motion.div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      The first image will be used as the primary receipt image
+                    </p>
+                  </motion.div>
+                )}
               </motion.div>
             )}
 
@@ -600,6 +611,8 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
                         <SelectItem value="USD">USD ($)</SelectItem>
                         <SelectItem value="EUR">EUR (€)</SelectItem>
                         <SelectItem value="GBP">GBP (£)</SelectItem>
+                        <SelectItem value="JPY">JPY (¥)</SelectItem>
+                        <SelectItem value="INR">INR (₹)</SelectItem>
                       </SelectContent>
                     </Select>
                   </motion.div>
@@ -637,6 +650,27 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
                       onChange={handleInputChange}
                     />
                   </motion.div>
+                  {isEditMode && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.6 }}
+                    >
+                      <label className="text-sm font-medium">Category</label>
+                      <Select value={category} onValueChange={setCategory}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select Category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="business">Business</SelectItem>
+                          <SelectItem value="personal">Personal</SelectItem>
+                          <SelectItem value="medical">Medical</SelectItem>
+                          <SelectItem value="electrical">Electrical</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </motion.div>
+                  )}
                 </motion.div>
               </motion.div>
             )}
@@ -701,6 +735,98 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
                 </motion.div>
               </motion.div>
             )}
+
+            {/* Edit mode - show all fields in one view */}
+            {isEditMode && (
+              <motion.div
+                key="edit-dates"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className="space-y-4 mt-4"
+              >
+                <motion.h2 className="text-xl font-semibold">Date Information</motion.h2>
+                <motion.div className="space-y-4">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <label className="text-sm font-medium">
+                      Date <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="date"
+                      className="mt-1"
+                      name="date"
+                      value={formData.date}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <label className="text-sm font-medium">Valid Until Date</label>
+                    <Input
+                      type="date"
+                      className="mt-1"
+                      name="validUptoDate"
+                      value={formData.validUptoDate}
+                      onChange={handleInputChange}
+                    />
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <label className="text-sm font-medium">Refundable Until Date</label>
+                    <Input
+                      type="date"
+                      className="mt-1"
+                      name="refundableUptoDate"
+                      value={formData.refundableUptoDate}
+                      onChange={handleInputChange}
+                    />
+                  </motion.div>
+                </motion.div>
+
+                {/* Add file upload in edit mode */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="mt-6"
+                >
+                  <motion.h2 className="text-xl font-semibold mb-4">Update Files (Optional)</motion.h2>
+                  <MultiFileUpload
+                    onFilesSelected={handleFilesSelected}
+                    maxFiles={5}
+                    acceptedFileTypes="image/*,application/pdf"
+                    maxSizeInMB={10}
+                  />
+                  {selectedFiles.length > 0 && (
+                    <motion.div
+                      className="mt-4 p-3 bg-[#1B9D65]/5 rounded-lg border border-[#1B9D65]/20"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <p className="text-sm font-medium text-[#1B9D65]">
+                        {selectedFiles.length} file{selectedFiles.length !== 1 ? "s" : ""} selected
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        The first image will be used as the primary receipt image
+                      </p>
+                    </motion.div>
+                  )}
+                </motion.div>
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
 
@@ -720,17 +846,19 @@ export default function AddReceiptDialog({ isOpen, onClose, onSuccess, initialCa
             Cancel
           </Button>
           <Button
-            onClick={handleNext}
-            disabled={!isStepValid() || isLoading || success}
+            onClick={isEditMode ? handleSubmit : handleNext}
+            disabled={isEditMode ? false : !isStepValid() || isLoading || success}
             className="bg-[#1B9D65] text-white hover:bg-[#1B9D65]/90 disabled:bg-gray-300"
-            whileHover={{ scale: isStepValid() && !isLoading && !success ? 1.05 : 1 }}
-            whileTap={{ scale: isStepValid() && !isLoading && !success ? 0.95 : 1 }}
+            whileHover={{ scale: isEditMode || (isStepValid() && !isLoading && !success) ? 1.05 : 1 }}
+            whileTap={{ scale: isEditMode || (isStepValid() && !isLoading && !success) ? 0.95 : 1 }}
           >
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {step === 4 ? "Saving..." : "Processing..."}
+                {isEditMode ? "Updating..." : step === 4 ? "Saving..." : "Processing..."}
               </>
+            ) : isEditMode ? (
+              "Update Receipt"
             ) : step === 4 ? (
               "Save"
             ) : (

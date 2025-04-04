@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { User, Mail, Phone, QrCode, Loader2, Trash2, AlertTriangle } from 'lucide-react'
+import { User, Mail, QrCode, Loader2, Trash2, AlertTriangle } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +36,7 @@ import Sidebar from "@/components/sidebar"
 import { useRouter } from "next/navigation"
 import OTPInput from "@/components/otp-input"
 import { sendOTP } from "@/services/api-wrapper"
+import VersionDisplay from "@/components/version-display"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile")
@@ -74,7 +75,7 @@ export default function SettingsPage() {
     try {
       setIsSendingOtp(true)
       const result = await sendOTP(formData.email)
-      
+
       if (result.success) {
         toast({
           title: "Verification Code Sent",
@@ -100,13 +101,14 @@ export default function SettingsPage() {
     }
   }
 
+  // Update the handleDeleteAccount function to properly send the OTP to the backend
   const handleDeleteAccount = async () => {
     try {
       setIsDeleting(true)
-      
+
       // Get the OTP from the input
       const otp = otpValue.join("")
-      
+
       if (otp.length !== 4) {
         toast({
           title: "Invalid Code",
@@ -116,18 +118,34 @@ export default function SettingsPage() {
         setIsDeleting(false)
         return
       }
-      
+
+      // Get user ID from local storage
+      const userData = getUserData()
+      const userId = userData?.uid
+
+      if (!userId) {
+        toast({
+          title: "Authentication Error",
+          description: "User ID not found. Please log in again.",
+          variant: "destructive",
+        })
+        setIsDeleting(false)
+        return
+      }
+
       // Call the delete account API with OTP
       const response = await fetch(`https://services.stage.zeropaper.online/api/zpu/users/delete?otp=${otp}`, {
         method: "DELETE",
         headers: {
-          "Authorization": `Bearer ${localStorage.getItem("authToken")}`,
-          "Content-Type": "application/json"
-        }
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          "Content-Type": "application/json",
+        },
       })
-      
+
+      const data = await response.json()
+
       if (!response.ok) {
-        throw new Error("Failed to delete account. Invalid verification code.")
+        throw new Error(data.message || "Failed to delete account. Invalid verification code.")
       }
 
       toast({
@@ -149,6 +167,7 @@ export default function SettingsPage() {
       })
     } finally {
       setIsDeleting(false)
+      setShowOtpInput(false)
     }
   }
 
@@ -257,22 +276,6 @@ export default function SettingsPage() {
                         />
                       </div>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                        <Input
-                          id="phone"
-                          name="phone"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          className="pl-10"
-                          placeholder="Your phone number"
-                          readOnly
-                        />
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -305,8 +308,8 @@ export default function SettingsPage() {
                             Delete Your Account
                           </AlertDialogTitle>
                           <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete your account and remove your data from
-                            our servers.
+                            This action cannot be undone. This will permanently delete your account and remove your data
+                            from our servers.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <div className="p-4 bg-red-50 rounded-md border border-red-200 mb-4">
@@ -314,7 +317,7 @@ export default function SettingsPage() {
                             All your receipts, payment information, and personal data will be permanently deleted.
                           </p>
                         </div>
-                        
+
                         {!showOtpInput ? (
                           <AlertDialogFooter>
                             <AlertDialogCancel disabled={isSendingOtp}>Cancel</AlertDialogCancel>
@@ -339,15 +342,10 @@ export default function SettingsPage() {
                               <p className="text-sm text-gray-600 mb-4">
                                 Enter the verification code sent to your email
                               </p>
-                              <OTPInput 
-                                length={4} 
-                                value={otpValue} 
-                                onChange={setOtpValue} 
-                                disabled={isDeleting}
-                              />
+                              <OTPInput length={4} onChange={setOtpValue} value={otpValue} disabled={isDeleting} />
                             </div>
                             <AlertDialogFooter>
-                              <AlertDialogCancel 
+                              <AlertDialogCancel
                                 disabled={isDeleting}
                                 onClick={() => {
                                   setShowOtpInput(false)
@@ -380,6 +378,9 @@ export default function SettingsPage() {
               </motion.div>
             </TabsContent>
           </Tabs>
+          <div className="mt-8">
+            <VersionDisplay />
+          </div>
         </motion.main>
       </div>
 
@@ -413,3 +414,4 @@ export default function SettingsPage() {
     </div>
   )
 }
+

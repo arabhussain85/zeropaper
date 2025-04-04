@@ -1,8 +1,10 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Search, Plus, Loader2, AlertCircle, RefreshCw, Wifi, WifiOff, Download, ArrowUpDown } from "lucide-react"
+import { Search, Plus, Loader2, AlertCircle, RefreshCw, Download, ArrowUpDown } from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { getReceiptsByUserId, deleteReceipt, getReceiptImage, type Receipt } from "@/services/receipt-service"
@@ -27,6 +29,32 @@ import ReceiptDetailModal from "@/components/receipt-detail-modal"
 import { jsPDF } from "jspdf"
 import "jspdf-autotable"
 import Sidebar from "@/components/sidebar"
+import VersionDisplay from "@/components/version-display"
+
+// Improved full-screen loader component with animation
+const FullScreenLoader = () => (
+  <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50">
+    <div className="w-24 h-24 relative mb-8">
+      <Image
+        src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Zero%20paper%20user2-05%201-2MhU8cy380KtTq1agohGg6DKTIqtzS.png"
+        alt="Zero Paper Logo"
+        fill
+        className="object-contain animate-pulse"
+      />
+    </div>
+    <div className="w-48 h-1 bg-gray-200 rounded-full overflow-hidden">
+      <div className="h-full bg-[#1B9D65] animate-[loader_1.5s_ease-in-out_infinite]" />
+    </div>
+    <p className="mt-6 text-lg font-medium text-gray-600">Loading your receipts...</p>
+    <style jsx global>{`
+      @keyframes loader {
+        0% { width: 0%; margin-left: 0; }
+        50% { width: 100%; margin-left: 0; }
+        100% { width: 0%; margin-left: 100%; }
+      }
+    `}</style>
+  </div>
+)
 
 // Auth helper functions implemented directly in the dashboard page
 function getUserId(): string {
@@ -92,6 +120,8 @@ const categories = [
 ]
 
 export default function DashboardPage() {
+  // State for initial page load - show loader immediately
+  const [pageLoading, setPageLoading] = useState(true)
   const [showReceiptForm, setShowReceiptForm] = useState(false)
   const [activeCategory, setActiveCategory] = useState("all")
   const [isLoaded, setIsLoaded] = useState(false)
@@ -114,6 +144,12 @@ export default function DashboardPage() {
   const [toDate, setToDate] = useState("")
   const { toast } = useToast()
   const router = useRouter()
+  const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null)
+
+  // Show spinner while view is being rendered
+  // Add loading overlay component
+  // Replace the LoadingOverlay component with our new FullScreenLoader
+  const LoadingOverlay = () => <FullScreenLoader />
 
   // Check authentication - simplified to prevent logout loop
   useEffect(() => {
@@ -224,12 +260,24 @@ export default function DashboardPage() {
       setIsLoading(false)
       setIsLoaded(true)
       setIsRefreshing(false)
+      // Remove the page loading state after data is loaded
+      setPageLoading(false)
     }
   }
 
-  // Initial load
+  // Initial load - show loader immediately
   useEffect(() => {
-    fetchReceipts()
+    // Set loading state immediately to show loader
+    setPageLoading(true)
+    setIsLoading(true)
+    setIsLoaded(false)
+
+    // Simulate a minimum loading time to ensure loader is visible
+    const minLoadTime = setTimeout(() => {
+      fetchReceipts()
+    }, 500) // Small delay to ensure loader is shown
+
+    return () => clearTimeout(minLoadTime)
   }, [])
 
   // Handle refresh
@@ -678,6 +726,7 @@ export default function DashboardPage() {
 
   // Handle add receipt with pre-selected category
   const handleAddReceipt = () => {
+    setEditingReceipt(null)
     setShowReceiptForm(true)
   }
 
@@ -813,8 +862,18 @@ export default function DashboardPage() {
     return { currency, total: total.toFixed(2) }
   })
 
+  // Update the handleOpenReceiptDetail function to also handle editing
+  const handleEditReceipt = (e: React.MouseEvent, receipt: Receipt) => {
+    e.stopPropagation() // Prevent opening the detail modal
+    setEditingReceipt(receipt)
+    setShowReceiptForm(true)
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50">
+      {/* Show loader when page is initially loading */}
+      {pageLoading && <FullScreenLoader />}
+
       {/* Sidebar */}
       <Sidebar />
 
@@ -827,19 +886,9 @@ export default function DashboardPage() {
                 <h1 className="text-xl font-bold">Receipt Dashboard</h1>
               </div>
 
-              <div className="flex items-center gap-3">
-                {isOnline ? <Wifi className="w-5 h-5 text-gray-500" /> : <WifiOff className="w-5 h-5 text-gray-500" />}
-
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleAddReceipt}
-                  className="bg-[#1B9D65] hover:bg-[#1B9D65]/90"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Receipt
-                </Button>
-              </div>
+              {/* Remove the WiFi status indicator from the navbar */}
+              {/* And replace with an empty div: */}
+              <div></div>
             </div>
           </div>
         </div>
@@ -854,7 +903,7 @@ export default function DashboardPage() {
           {/* Network Status Banner */}
           {!isOnline && (
             <Alert variant="warning" className="mb-6 bg-amber-50 border-amber-200">
-              <WifiOff className="h-4 w-4 text-amber-600" />
+              <AlertCircle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-amber-800">
                 You're currently offline. Some features may be limited.
               </AlertDescription>
@@ -1022,29 +1071,44 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {!isLoading && filteredReceipts.length > 0 && (
-            <motion.div
-              className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4"
-              variants={itemVariants}
-            >
+          {/* Update the Add Receipt button to be next to the receipt count */}
+          <motion.div
+            className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4"
+            variants={itemVariants}
+          >
+            <div className="flex items-center gap-3">
               <h2 className="text-xl font-semibold">{filteredReceipts.length} Receipts</h2>
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex flex-col gap-1">
-                  {formattedTotalsByCurrency.map(({ currency, total }) => (
-                    <p key={currency} className="text-lg font-semibold">
-                      Total {currency}: {total}
-                    </p>
-                  ))}
-                </div>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  setEditingReceipt(null)
+                  setShowReceiptForm(true)
+                }}
+                className="bg-[#1B9D65] hover:bg-[#1B9D65]/90"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Receipt
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-col gap-1">
+                {formattedTotalsByCurrency.map(({ currency, total }) => (
+                  <p key={currency} className="text-lg font-semibold">
+                    Total {currency}: {total}
+                  </p>
+                ))}
               </div>
-            </motion.div>
-          )}
+            </div>
+          </motion.div>
 
           {/* Receipts Table */}
           {!isLoading && filteredReceipts.length > 0 && (
             <motion.div className="bg-white rounded-lg shadow overflow-hidden" variants={itemVariants}>
               <div className="overflow-x-auto">
                 <table className="w-full">
+                  {/* Modify the receipts table to make product column second and bold */}
+                  {/* Find the table header section and reorder the columns: */}
                   <thead className="bg-white border-b text-black">
                     <tr>
                       <th
@@ -1057,20 +1121,20 @@ export default function DashboardPage() {
                       </th>
                       <th
                         className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer"
-                        onClick={() => handleSort("store")}
-                      >
-                        <div className="flex items-center gap-1">
-                          Store
-                          {sortBy === "store" && <ArrowUpDown className="w-4 h-4" />}
-                        </div>
-                      </th>
-                      <th
-                        className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer"
                         onClick={() => handleSort("product")}
                       >
                         <div className="flex items-center gap-1">
                           Product
                           {sortBy === "product" && <ArrowUpDown className="w-4 h-4" />}
+                        </div>
+                      </th>
+                      <th
+                        className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer"
+                        onClick={() => handleSort("store")}
+                      >
+                        <div className="flex items-center gap-1">
+                          Store
+                          {sortBy === "store" && <ArrowUpDown className="w-4 h-4" />}
                         </div>
                       </th>
                       <th
@@ -1091,8 +1155,10 @@ export default function DashboardPage() {
                           {sortBy === "price" && <ArrowUpDown className="w-4 h-4" />}
                         </div>
                       </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
+                  {/* And update the table body to match the new column order and make product bold: */}
                   <tbody className="bg-white divide-y divide-gray-100">
                     {filteredReceipts.map((receipt, index) => (
                       <tr
@@ -1101,17 +1167,27 @@ export default function DashboardPage() {
                         onClick={() => handleOpenReceiptDetail(receipt)}
                       >
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-black">#{index + 1}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-black">
+                          {receipt.productName || "No product name"}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-black">
                           <div className="flex items-center gap-2">
                             <span>{receipt.storeName || "Unknown Store"}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-black">
-                          {receipt.productName || "No product name"}
-                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-black">{formatDate(receipt.date)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-black">
                           {receipt.currency || "€"} {(receipt.price || 0).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => handleEditReceipt(e, receipt)}
+                            className="text-gray-500 hover:text-[#1B9D65]"
+                          >
+                            Edit
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -1134,16 +1210,21 @@ export default function DashboardPage() {
             <Plus className="w-6 h-6" />
           </motion.button>
 
-          {/* Receipt Upload Form Modal */}
+          {/* Update the AddReceiptDialog to handle editing */}
           {showReceiptForm && (
             <AddReceiptDialog
               isOpen={showReceiptForm}
-              onClose={() => setShowReceiptForm(false)}
+              onClose={() => {
+                setShowReceiptForm(false)
+                setEditingReceipt(null)
+              }}
               onSuccess={() => {
                 setShowReceiptForm(false)
+                setEditingReceipt(null)
                 fetchReceipts()
               }}
               initialCategory={activeCategory !== "all" ? activeCategory : undefined}
+              editReceipt={editingReceipt}
             />
           )}
 
@@ -1192,6 +1273,9 @@ export default function DashboardPage() {
             onDownloadPDF={handleDownloadReceiptPDF}
           />
         </motion.main>
+        <div className="mt-8 text-center">
+          <VersionDisplay />
+        </div>
       </div>
     </div>
   )
