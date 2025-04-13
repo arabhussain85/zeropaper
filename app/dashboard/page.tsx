@@ -30,6 +30,7 @@ import { jsPDF } from "jspdf"
 import "jspdf-autotable"
 import Sidebar from "@/components/sidebar"
 import VersionDisplay from "@/components/version-display"
+import { downloadReceiptsZip } from "@/services/receipt-service"
 
 // Improved full-screen loader component with animation
 const FullScreenLoader = () => (
@@ -118,6 +119,65 @@ const categories = [
     name: "Other",
   },
 ]
+
+
+// Function to handle downloading receipts as ZIP
+export async function handleDownloadReceiptsZip(
+  activeCategory: string,
+  fromDate: string,
+  toDate: string,
+  toast: any,
+  setIsDownloadingZip: (value: boolean) => void,
+) {
+  try {
+    if (!fromDate || !toDate) {
+      toast({
+        title: "Date Range Required",
+        description: "Please select both start and end dates.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsDownloadingZip(true)
+
+    // Use the correct category parameter format
+    const category = activeCategory === "all" ? "" : activeCategory
+
+    // Call the service function
+    const result = await downloadReceiptsZip(category, fromDate, toDate)
+
+    if (!result.success || !result.url) {
+      throw new Error("Failed to download receipts")
+    }
+
+    // Create a download link and trigger it
+    const a = document.createElement("a")
+    a.href = result.url
+    a.download = `receipts-${fromDate}-to-${toDate}.zip`
+    document.body.appendChild(a)
+    a.click()
+
+    // Clean up
+    document.body.removeChild(a)
+    URL.revokeObjectURL(result.url)
+
+    toast({
+      title: "Receipts Downloaded",
+      description: "Your receipts have been downloaded as a ZIP file.",
+    })
+  } catch (error) {
+    console.error("Error downloading receipts ZIP:", error)
+    toast({
+      title: "Download Failed",
+      description: error instanceof Error ? error.message : "Failed to download receipts. Please try again.",
+      variant: "destructive",
+    })
+  } finally {
+    setIsDownloadingZip(false)
+  }
+}
+
 
 export default function DashboardPage() {
   // State for initial page load - show loader immediately

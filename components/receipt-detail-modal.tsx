@@ -641,7 +641,7 @@
 // }
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -652,7 +652,6 @@ import {
   Edit,
   Calendar,
   Store,
-  Tag,
   MapPin,
   CreditCard,
   Clock,
@@ -661,7 +660,7 @@ import {
   ChevronRight,
   ImageIcon,
 } from "lucide-react"
-import { deleteReceipt } from "@/services/receipt-service"
+import { deleteReceipt, getReceiptImage, type Receipt } from "@/services/receipt-service"
 import { useToast } from "@/components/ui/use-toast"
 import {
   AlertDialog,
@@ -674,48 +673,37 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-// Define the Receipt type
-interface Receipt {
-  id: string
-  productName: string
-  price: number
-  currency: string
-  category: string
-  storeName: string
-  date: string
-  storeLocation?: string
-  validUptoDate?: string
-  refundableUptoDate?: string
-  notes?: string
-  additionalImages?: string
-}
-
 interface ReceiptDetailModalProps {
   receipt: Receipt | null
-  receiptImage: string | null
   isOpen: boolean
   onClose: () => void
   onDelete: (id: string) => void
   onDownloadPDF: (receipt: Receipt) => void
+  onEdit?: (receipt: Receipt) => void
 }
 
 export default function ReceiptDetailModal({
   receipt,
-  receiptImage,
   isOpen,
   onClose,
   onDelete,
   onDownloadPDF,
+  onEdit,
 }: ReceiptDetailModalProps) {
   const [activeTab, setActiveTab] = useState("details")
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [receiptImage, setReceiptImage] = useState<string | null>(null)
+  const [isLoadingImage, setIsLoadingImage] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [additionalImages, setAdditionalImages] = useState<string[]>([])
   const { toast } = useToast()
 
+  // Calculate total images (primary + additional)
+  const totalImages = (receiptImage ? 1 : 0) + additionalImages.length
+
   // Parse additional images if available
-  useState(() => {
+  useEffect(() => {
     if (receipt?.additionalImages) {
       try {
         const images = JSON.parse(receipt.additionalImages)
@@ -724,12 +712,38 @@ export default function ReceiptDetailModal({
         }
       } catch (error) {
         console.error("Error parsing additional images:", error)
+        setAdditionalImages([])
       }
+    } else {
+      setAdditionalImages([])
     }
-  })
+  }, [receipt])
 
-  // Calculate total images (primary + additional)
-  const totalImages = (receiptImage ? 1 : 0) + additionalImages.length
+  // Fetch the image when the receipt changes or modal opens
+  useEffect(() => {
+    if (receipt && receipt.id && isOpen) {
+      setIsLoadingImage(true)
+      getReceiptImage(receipt.id)
+        .then((imageData) => {
+          setReceiptImage(imageData)
+          setCurrentImageIndex(0) // Reset to first image when loading a new receipt
+        })
+        .catch((error) => {
+          console.error("Failed to load receipt image:", error)
+          toast({
+            title: "Image Load Error",
+            description: "Failed to load receipt image. Please try again.",
+            variant: "destructive",
+          })
+        })
+        .finally(() => {
+          setIsLoadingImage(false)
+        })
+    } else {
+      // Reset image when modal is closed or receipt changes
+      setReceiptImage(null)
+    }
+  }, [receipt, isOpen, toast])
 
   // Handle image navigation
   const nextImage = () => {
@@ -753,33 +767,36 @@ export default function ReceiptDetailModal({
     }
   }
 
+  if (!receipt) return null
+
   const handleDelete = async () => {
-    if (!receipt?.id) return
+    if (!receipt.id) return
 
     try {
       setIsDeleting(true)
-      const success = await deleteReceipt(receipt.id)
+      const response = await deleteReceipt(receipt.id)
 
-      if (success) {
-        toast({
-          title: "Receipt Deleted",
-          description: "The receipt has been successfully deleted.",
-        })
-        onDelete(receipt.id)
-        onClose()
-      } else {
-        throw new Error("Failed to delete receipt")
+      if (!response.success) {
+        throw new Error("Failed to delete receipt from server")
       }
+
+      toast({
+        title: "Receipt Deleted",
+        description: "The receipt has been successfully deleted.",
+      })
+
+      onDelete(receipt.id)
+      setDeleteConfirmOpen(false)
+      onClose()
     } catch (error) {
       console.error("Error deleting receipt:", error)
       toast({
         title: "Error",
-        description: "Failed to delete receipt. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to delete receipt. Please try again.",
         variant: "destructive",
       })
     } finally {
       setIsDeleting(false)
-      setShowDeleteConfirm(false)
     }
   }
 
@@ -793,7 +810,12 @@ export default function ReceiptDetailModal({
     }
   }
 
-  if (!receipt) return null
+  const handleEdit = () => {
+    if (onEdit && receipt) {
+      onEdit(receipt)
+      onClose()
+    }
+  }
 
   return (
     <>
@@ -826,7 +848,7 @@ export default function ReceiptDetailModal({
 
             <TabsContent value="details" className="p-6 space-y-6">
               <div className="bg-[#1B9D65]/5 p-4 rounded-lg border border-[#1B9D65]/20">
-                <h3 className="text-lg font-bold text-[#1B9D65] mb-2">{receipt.productName}</h3>
+                <h3 className="text-lg font-bold text-[#1B9D65] mb-2">{receipt.productName || "No product name"}</h3>
                 <div className="flex justify-between items-center">
                   <p className="text-xl font-bold">
                     {receipt.currency || "€"} {(receipt.price || 0).toFixed(2)}
@@ -850,7 +872,7 @@ export default function ReceiptDetailModal({
                   <Calendar className="w-5 h-5 text-gray-500 mt-0.5" />
                   <div>
                     <p className="text-sm text-gray-500">Date</p>
-                    <p className="font-medium">{formatDate(receipt.date)}</p>
+                    <p className="font-medium">{formatDate(receipt.date || "")}</p>
                   </div>
                 </div>
 
@@ -883,22 +905,12 @@ export default function ReceiptDetailModal({
                     </div>
                   </div>
                 )}
-
-                {receipt.notes && (
-                  <div className="flex items-start gap-3">
-                    <Tag className="w-5 h-5 text-gray-500 mt-0.5" />
-                    <div>
-                      <p className="text-sm text-gray-500">Notes</p>
-                      <p className="font-medium">{receipt.notes}</p>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="flex justify-between pt-4 border-t">
                 <Button
                   variant="outline"
-                  onClick={() => setShowDeleteConfirm(true)}
+                  onClick={() => setDeleteConfirmOpen(true)}
                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
@@ -913,15 +925,7 @@ export default function ReceiptDetailModal({
                     <Download className="w-4 h-4 mr-2" />
                     Download PDF
                   </Button>
-                  <Button
-                    variant="default"
-                    className="bg-[#1B9D65] hover:bg-[#1B9D65]/90"
-                    onClick={() => {
-                      // Handle edit action
-                      onClose()
-                      // Trigger edit dialog from parent component
-                    }}
-                  >
+                  <Button variant="default" className="bg-[#1B9D65] hover:bg-[#1B9D65]/90" onClick={handleEdit}>
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
                   </Button>
@@ -931,13 +935,24 @@ export default function ReceiptDetailModal({
 
             <TabsContent value="image" className="p-0">
               <div className="relative bg-gray-900 flex items-center justify-center min-h-[300px]">
-                {totalImages > 0 ? (
+                {isLoadingImage ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 text-white animate-spin" />
+                    <p className="text-white mt-4">Loading receipt image...</p>
+                  </div>
+                ) : totalImages > 0 ? (
                   <>
-                    {/* Image display */}
+                    {/* Image display with better MIME type handling */}
                     <img
-                      src={`data:image/jpeg;base64,${getCurrentImage()}`}
+                      src={`data:image/*;base64,${getCurrentImage()}`}
                       alt={`Receipt for ${receipt.productName}`}
                       className="max-h-[70vh] max-w-full object-contain"
+                      onError={(e) => {
+                        console.error("Image failed to load")
+                        console.log("Image base64 length:", getCurrentImage()?.length || 0)
+                        console.log("Image base64 starts with:", getCurrentImage()?.substring(0, 20) || "empty")
+                        e.currentTarget.src = "/placeholder.svg?height=200&width=200"
+                      }}
                     />
 
                     {/* Image navigation controls */}
@@ -991,7 +1006,7 @@ export default function ReceiptDetailModal({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -1021,4 +1036,3 @@ export default function ReceiptDetailModal({
     </>
   )
 }
-
