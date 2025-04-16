@@ -132,59 +132,50 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
 export async function downloadReceiptsZip(
   category = "",
   fromDate: string,
-  toDate: string,
+  toDate: string
 ): Promise<{ success: boolean; url?: string }> {
   try {
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error("Authentication required. Please log in again.");
-    }
+    const uid = localStorage.getItem("uid");
+    const token = localStorage.getItem("authToken");
 
-    const uid = getUserId();
     if (!uid) {
-      throw new Error("User ID not found");
+      throw new Error("User ID not found in localStorage.");
+    }
+    if (!token) {
+      throw new Error("Authentication token not found in localStorage.");
     }
 
-    console.log("Downloading receipts ZIP with params:", { category, fromDate, toDate, uid });
-
-    // Format to 'DD.MM.YYYY HH:mm:ss'
-    const formatDateForApi = (dateStr: string) => {
-      try {
-        const date = new Date(dateStr);
-        const day = date.getDate().toString().padStart(2, "0");
-        const month = (date.getMonth() + 1).toString().padStart(2, "0");
-        const year = date.getFullYear();
-        const hours = date.getHours().toString().padStart(2, "0");
-        const minutes = date.getMinutes().toString().padStart(2, "0");
-        const seconds = date.getSeconds().toString().padStart(2, "0");
-        return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
-      } catch (e) {
-        console.error("Error formatting date:", e);
-        return dateStr;
-      }
+    // Format date to DD.MM.YYYY HH:mm:ss
+    const formatDate = (dateStr: string): string => {
+      const date = new Date(dateStr);
+      const day = date.getDate().toString().padStart(2, "0");
+      const month = (date.getMonth() + 1).toString().padStart(2, "0");
+      const year = date.getFullYear();
+      const hours = date.getHours().toString().padStart(2, "0");
+      const minutes = date.getMinutes().toString().padStart(2, "0");
+      const seconds = date.getSeconds().toString().padStart(2, "0");
+      return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
     };
 
-    const formattedFromDate = encodeURIComponent(formatDateForApi(fromDate));
-    const formattedToDate = encodeURIComponent(formatDateForApi(toDate));
-    const encodedCategory = encodeURIComponent(category);
-    const encodedUid = encodeURIComponent(uid);
+    const formattedFrom = encodeURIComponent(formatDate(fromDate)); // e.g. 17.03.2025 00:00:00 ➝ 17.03.2025%2000%3A00%3A00
+    const formattedTo = encodeURIComponent(formatDate(toDate));
 
-    // Using the correct parameter order from the cURL example: category, uid, fromDate, toDate
-    const baseUrl = API_BASE_URL.includes('/api/zpu') ? API_BASE_URL : `${API_BASE_URL}/api/zpu`;
-    const url = `${baseUrl}/receipts/zip?category=${encodedCategory}&uid=${encodedUid}&fromDate=${formattedFromDate}&toDate=${formattedToDate}`;
-    console.log("Final request URL:", url);
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/zip",
-      },
-      body: "",
+    const params = new URLSearchParams({
+      uid,
+      category,
+      fromDate: formattedFrom,
+      toDate: formattedTo,
     });
 
-    console.log("ZIP response status:", response.status, response.statusText);
+    const url = `https://services.stage.zeropaper.online/api/zpu/receipts/zip?${params.toString()}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/zip",
+      },
+    });
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Could not read error details");
@@ -200,6 +191,8 @@ export async function downloadReceiptsZip(
     return { success: false };
   }
 }
+
+
 // Function to add a new receipt
 export async function addReceipt(receipt: Omit<Receipt, "uid">): Promise<Receipt> {
   try {
@@ -463,53 +456,75 @@ export async function getReceiptImage(receiptId: string): Promise<string> {
 }
 export async function updateReceipt(receipt: Receipt): Promise<{ success: boolean; receipt?: Receipt }> {
   try {
-    const token = getAuthToken()
+    const token = getAuthToken();
     if (!token) {
-      throw new Error("Authentication required. Please log in again.")
+      throw new Error("Authentication required. Please log in again.");
     }
 
     if (!receipt.id) {
-      throw new Error("Receipt ID is required for updating")
+      throw new Error("Receipt ID is required for updating");
     }
 
-    console.log("Updating receipt:", receipt.id)
+    console.log("Updating receipt:", receipt.id);
 
-    const queryParams = new URLSearchParams({
-      id: receipt.id,
-      imageBase64: receipt.imageBase64 || "",
-      price: receipt.price?.toString() || "",
-      productName: receipt.productName || "",
-      category: receipt.category || "",
-      date: receipt.date || "",
-      refundableUptoDate: receipt.refundableUptoDate || "",
-      storeLocation: receipt.storeLocation || "",
-      storeName: receipt.storeName || "",
-      validUptoDate: receipt.validUptoDate || "",
-      currency: receipt.currency || "",
-      receiptType: receipt.receiptType || "",
-      notes: receipt.notes || "",
-    })
+    const formatDateForApi = (dateStr?: string): string => {
+      if (!dateStr) return "";
+      try {
+        const date = new Date(dateStr);
+        const day = date.getDate().toString().padStart(2, "0");
+        const month = (date.getMonth() + 1).toString().padStart(2, "0");
+        const year = date.getFullYear();
+        const hours = date.getHours().toString().padStart(2, "0");
+        const minutes = date.getMinutes().toString().padStart(2, "0");
+        const seconds = date.getSeconds().toString().padStart(2, "0");
+        return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
+      } catch (e) {
+        console.error("Error formatting date:", e);
+        return "";
+      }
+    };
 
-    const url = `${API_BASE_URL}/receipts/update?${queryParams.toString()}`
+    const formData = new FormData();
+    formData.append("id", receipt.id);
+    formData.append("imageBase64", receipt.imageBase64 || "");
+    formData.append("price", receipt.price?.toString() || "");
+    formData.append("productName", receipt.productName || "");
+    formData.append("category", receipt.category || "");
+    formData.append("date", formatDateForApi(receipt.date));
+    formData.append("refundableUptoDate", formatDateForApi(receipt.refundableUptoDate));
+    formData.append("validUptoDate", formatDateForApi(receipt.validUptoDate));
+    formData.append("storeLocation", receipt.storeLocation || "");
+    formData.append("storeName", receipt.storeName || "");
+    formData.append("currency", receipt.currency || "");
+    // formData.append("receiptType", receipt.receiptType || "");
+    // formData.append("notes", receipt.notes || "");
+
+    const baseUrl = API_BASE_URL.includes("/api/zpu")
+      ? API_BASE_URL
+      : `${API_BASE_URL}/api/zpu`;
+
+    const url = `${baseUrl}/receipts/update`;
 
     const response = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
+        // ❌ Don't set Content-Type here — let browser set it for FormData
         Accept: "application/json",
       },
-    })
+      body: formData,
+    });
 
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Server error response:", errorText)
-      throw new Error(`Failed to update receipt: ${response.status} ${response.statusText}. Details: ${errorText}`)
+      const errorText = await response.text();
+      console.error("Server error response:", errorText);
+      throw new Error(`Failed to update receipt: ${response.status} ${response.statusText}. Details: ${errorText}`);
     }
 
-    const data = await response.json()
-    return { success: true, receipt: data }
+    const data = await response.json();
+    return { success: true, receipt: data };
   } catch (error) {
-    console.error("Error updating receipt:", error)
-    return { success: false }
+    console.error("Error updating receipt:", error);
+    return { success: false };
   }
 }

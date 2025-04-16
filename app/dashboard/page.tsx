@@ -4,7 +4,17 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Search, Plus, Loader2, AlertCircle, RefreshCw, Download, ArrowUpDown } from "lucide-react"
+import {
+  Search,
+  Plus,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  Download,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { getReceiptsByUserId, deleteReceipt, getReceiptImage, type Receipt } from "@/services/receipt-service"
@@ -20,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -30,7 +40,6 @@ import { jsPDF } from "jspdf"
 import "jspdf-autotable"
 import Sidebar from "@/components/sidebar"
 import VersionDisplay from "@/components/version-display"
-import { downloadReceiptsZip } from "@/services/receipt-service"
 
 // Improved full-screen loader component with animation
 const FullScreenLoader = () => (
@@ -120,64 +129,8 @@ const categories = [
   },
 ]
 
-
-// Function to handle downloading receipts as ZIP
-export async function handleDownloadReceiptsZip(
-  activeCategory: string,
-  fromDate: string,
-  toDate: string,
-  toast: any,
-  setIsDownloadingZip: (value: boolean) => void,
-) {
-  try {
-    if (!fromDate || !toDate) {
-      toast({
-        title: "Date Range Required",
-        description: "Please select both start and end dates.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsDownloadingZip(true)
-
-    // Use the correct category parameter format
-    const category = activeCategory === "all" ? "" : activeCategory
-
-    // Call the service function
-    const result = await downloadReceiptsZip(category, fromDate, toDate)
-
-    if (!result.success || !result.url) {
-      throw new Error("Failed to download receipts")
-    }
-
-    // Create a download link and trigger it
-    const a = document.createElement("a")
-    a.href = result.url
-    a.download = `receipts-${fromDate}-to-${toDate}.zip`
-    document.body.appendChild(a)
-    a.click()
-
-    // Clean up
-    document.body.removeChild(a)
-    URL.revokeObjectURL(result.url)
-
-    toast({
-      title: "Receipts Downloaded",
-      description: "Your receipts have been downloaded as a ZIP file.",
-    })
-  } catch (error) {
-    console.error("Error downloading receipts ZIP:", error)
-    toast({
-      title: "Download Failed",
-      description: error instanceof Error ? error.message : "Failed to download receipts. Please try again.",
-      variant: "destructive",
-    })
-  } finally {
-    setIsDownloadingZip(false)
-  }
-}
-
+// Replace the existing handleDownloadReceiptsZip function with this implementation
+// that uses the service function from receipt-service.tsx
 
 export default function DashboardPage() {
   // State for initial page load - show loader immediately
@@ -205,6 +158,10 @@ export default function DashboardPage() {
   const { toast } = useToast()
   const router = useRouter()
   const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null)
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Show spinner while view is being rendered
   // Add loading overlay component
@@ -694,7 +651,6 @@ export default function DashboardPage() {
     }
   }
 
-  // Handle download receipts as ZIP
   const handleDownloadReceiptsZip = async () => {
     try {
       if (!fromDate || !toDate) {
@@ -708,6 +664,7 @@ export default function DashboardPage() {
 
       setIsDownloadingZip(true)
 
+      // Get user ID from localStorage using the getUserId helper
       const uid = getUserId()
       if (!uid) {
         toast({
@@ -718,6 +675,7 @@ export default function DashboardPage() {
         return
       }
 
+      // Get auth token
       const token = getAuthToken()
       if (!token) {
         toast({
@@ -728,21 +686,52 @@ export default function DashboardPage() {
         return
       }
 
-      // Use the correct category parameter format
-      const category = activeCategory === "all" ? "" : activeCategory
+      // Convert "all" category to empty string for the API
+      const categoryParam = activeCategory === "all" ? "" : activeCategory
 
-      // Format dates as required by the API
-      const formattedFromDate = fromDate // Already in YYYY-MM-DD format
-      const formattedToDate = toDate // Already in YYYY-MM-DD format
+      // Format dates properly for the API (DD.MM.YYYY HH:MM:SS)
+      const formatDateForApi = (dateStr: string) => {
+        try {
+          const date = new Date(dateStr)
+          if (isNaN(date.getTime())) {
+            throw new Error("Invalid date")
+          }
 
-      // Use the correct endpoint
-      const apiUrl = `https://services.stage.zeropaper.online/api/zpu/receipts/zip?uid=${uid}&category=${category}&fromDate=${formattedFromDate}&toDate=${formattedToDate}`
+          const day = date.getDate().toString().padStart(2, "0")
+          const month = (date.getMonth() + 1).toString().padStart(2, "0")
+          const year = date.getFullYear()
+          const hours = date.getHours().toString().padStart(2, "0")
+          const minutes = date.getMinutes().toString().padStart(2, "0")
+          const seconds = date.getSeconds().toString().padStart(2, "0")
+
+          return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`
+        } catch (e) {
+          console.error("Error formatting date:", e)
+          return ""
+        }
+      }
+
+      // Create properly formatted date strings
+      const formattedFromDate = formatDateForApi(fromDate)
+      const formattedToDate = formatDateForApi(toDate)
+
+      if (!formattedFromDate || !formattedToDate) {
+        throw new Error("Invalid date format")
+      }
+
+      // Build URL with URLSearchParams to properly encode parameters
+      const params = new URLSearchParams()
+      params.append("uid", uid)
+      params.append("category", categoryParam)
+      params.append("fromDate", formattedFromDate)
+      params.append("toDate", formattedToDate)
+
+      const apiUrl = `https://services.stage.zeropaper.online/api/zpu/receipts/zip?${params.toString()}`
 
       console.log("Downloading receipts ZIP from:", apiUrl)
 
-      // Create a fetch request with the appropriate headers
       const response = await fetch(apiUrl, {
-        method: "POST",
+        method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/zip",
@@ -750,14 +739,13 @@ export default function DashboardPage() {
       })
 
       if (!response.ok) {
-        throw new Error(`Download failed with status: ${response.status}`)
+        const errorText = await response.text().catch(() => "Unknown error")
+        throw new Error(`Download failed with status: ${response.status}. ${errorText}`)
       }
 
-      // Get the response as a blob
       const blob = await response.blob()
-
-      // Create a download link and trigger it
       const url = URL.createObjectURL(blob)
+
       const a = document.createElement("a")
       a.href = url
       a.download = `receipts-${fromDate}-to-${toDate}.zip`
@@ -804,6 +792,21 @@ export default function DashboardPage() {
   const handleDateFilterChange = () => {
     console.log(`Filtering receipts from ${fromDate} to ${toDate}`)
     // The filtering is handled automatically in the filteredReceipts variable
+  }
+
+  // Pagination handlers
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    // Scroll to top of table when changing pages
+    const tableElement = document.getElementById("receipts-table")
+    if (tableElement) {
+      tableElement.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(Number(value))
+    setCurrentPage(1) // Reset to first page when changing items per page
   }
 
   // Filter and sort receipts
@@ -855,6 +858,12 @@ export default function DashboardPage() {
       }
       return 0
     })
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredReceipts.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredReceipts.length)
+  const paginatedReceipts = filteredReceipts.slice(startIndex, endIndex)
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -1162,10 +1171,31 @@ export default function DashboardPage() {
             </div>
           </motion.div>
 
-          {/* Receipts Table */}
+          {/* Receipts Table with Pagination */}
           {!isLoading && filteredReceipts.length > 0 && (
             <motion.div className="bg-white rounded-lg shadow overflow-hidden" variants={itemVariants}>
-              <div className="overflow-x-auto">
+              {/* Items per page selector */}
+              <div className="p-4 border-b flex justify-end items-center">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="items-per-page" className="text-sm whitespace-nowrap">
+                    Items per page:
+                  </Label>
+                  <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                    <SelectTrigger id="items-per-page" className="w-[80px]">
+                      <SelectValue placeholder="10" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto" id="receipts-table">
                 <table className="w-full">
                   {/* Modify the receipts table to make product column second and bold */}
                   {/* Find the table header section and reorder the columns: */}
@@ -1220,13 +1250,15 @@ export default function DashboardPage() {
                   </thead>
                   {/* And update the table body to match the new column order and make product bold: */}
                   <tbody className="bg-white divide-y divide-gray-100">
-                    {filteredReceipts.map((receipt, index) => (
+                    {paginatedReceipts.map((receipt, index) => (
                       <tr
                         key={receipt.id || index}
                         className="hover:bg-gray-50 cursor-pointer"
                         onClick={() => handleOpenReceiptDetail(receipt)}
                       >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-black">#{index + 1}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-black">
+                          #{startIndex + index + 1}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-black">
                           {receipt.productName || "No product name"}
                         </td>
@@ -1254,6 +1286,80 @@ export default function DashboardPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <div className="text-sm text-gray-700">
+                    Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
+                    <span className="font-medium">{endIndex}</span> of{" "}
+                    <span className="font-medium">{filteredReceipts.length}</span> receipts
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      <span className="sr-only">Previous Page</span>
+                    </Button>
+
+                    {/* Page number buttons */}
+                    <div className="hidden md:flex space-x-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        // Show first page, last page, current page, and pages around current
+                        let pageToShow: number | null = null
+
+                        if (totalPages <= 5) {
+                          // If 5 or fewer pages, show all pages
+                          pageToShow = i + 1
+                        } else if (currentPage <= 3) {
+                          // If near start, show first 5 pages
+                          pageToShow = i + 1
+                        } else if (currentPage >= totalPages - 2) {
+                          // If near end, show last 5 pages
+                          pageToShow = totalPages - 4 + i
+                        } else {
+                          // Show current page and 2 pages on each side
+                          pageToShow = currentPage - 2 + i
+                        }
+
+                        if (pageToShow) {
+                          return (
+                            <Button
+                              key={pageToShow}
+                              variant={currentPage === pageToShow ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => handlePageChange(pageToShow!)}
+                              className={currentPage === pageToShow ? "bg-[#1B9D65] hover:bg-[#1B9D65]/90" : ""}
+                            >
+                              {pageToShow}
+                            </Button>
+                          )
+                        }
+                        return null
+                      })}
+                    </div>
+
+                    {/* Mobile page indicator */}
+                    <div className="md:hidden text-sm">
+                      Page {currentPage} of {totalPages}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                      <span className="sr-only">Next Page</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1340,4 +1446,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-
