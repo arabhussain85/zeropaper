@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/components/ui/use-toast"
 import { refreshAuthTokenIfNeeded, getAuthToken, getUserData } from "@/utils/auth-helpers"
 import { fileToBase64 } from "@/services/api-wrapper"
+import { updateReceipt } from "@/services/receipt-service"
 import {
   ArrowLeft,
   Check,
@@ -218,20 +219,6 @@ export default function AddReceiptDialog({
         return
       }
 
-      function formatDate(dateString) {
-        if (!dateString) return undefined // Handle undefined dates
-        const date = new Date(dateString)
-
-        const day = String(date.getDate()).padStart(2, "0")
-        const month = String(date.getMonth() + 1).padStart(2, "0") // Months are zero-based
-        const year = date.getFullYear()
-        const hours = String(date.getHours()).padStart(2, "0")
-        const minutes = String(date.getMinutes()).padStart(2, "0")
-        const seconds = String(date.getSeconds()).padStart(2, "0")
-
-        return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`
-      }
-
       // Process the primary image (first image) if available
       let primaryImageBase64 = null
       if (selectedFiles.length > 0) {
@@ -262,59 +249,82 @@ export default function AddReceiptDialog({
         }
       }
 
+      // Ensure dates are valid before sending
+      const validateDate = (dateString) => {
+        if (!dateString) return null
+        const date = new Date(dateString)
+        return isNaN(date.getTime()) ? null : dateString
+      }
+
       const receiptData = {
         imageBase64: primaryImageBase64,
         additionalImages: additionalImagesBase64.length > 0 ? JSON.stringify(additionalImagesBase64) : undefined,
         price: Number.parseFloat(formData.price),
         productName: formData.productName,
-        addedDate: formatDate(formData.date),
         category,
-        date: formatDate(formData.date),
-        refundableUptoDate: formatDate(formData.refundableUptoDate),
+        // Only include valid dates
+        date: validateDate(formData.date),
+        validUptoDate: validateDate(formData.validUptoDate),
+        refundableUptoDate: validateDate(formData.refundableUptoDate),
         storeLocation: formData.storeLocation,
         storeName: formData.storeName,
         uid: userData.uid,
-        updatedDate: formatDate(formData.date),
-        validUptoDate: formatDate(formData.validUptoDate),
         currency: formData.currency,
         receiptType: formData.receiptType,
         fileCount: selectedFiles.length,
         notes: formData.notes,
       }
 
-      // If editing, add the receipt ID
+      let response
+
+      // If editing, use updateReceipt function from the service
       if (isEditMode && editReceipt?.id) {
         receiptData.id = editReceipt.id
-      }
 
-      // Submit receipt with image if available
-      const formDataEncoded = new URLSearchParams()
-      for (const [key, value] of Object.entries(receiptData)) {
-        if (value !== undefined && value !== null) {
-          formDataEncoded.append(key, value.toString())
+        console.log("Updating receipt with data:", {
+          id: receiptData.id,
+          price: receiptData.price,
+          productName: receiptData.productName,
+          date: receiptData.date,
+          // Don't log sensitive data
+        })
+
+        // Call the updateReceipt function from the service
+        const result = await updateReceipt(receiptData)
+
+        console.log("Update receipt result:", result)
+
+        if (!result.success) {
+          throw new Error("Failed to update receipt")
         }
+
+        response = result.receipt
+      } else {
+        // For new receipts, use the existing direct API call approach
+        const formDataEncoded = new URLSearchParams()
+        for (const [key, value] of Object.entries(receiptData)) {
+          if (value !== undefined && value !== null) {
+            formDataEncoded.append(key, value.toString())
+          }
+        }
+
+        const apiResponse = await fetch("https://services.stage.zeropaper.online/api/zpu/receipts/add", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Authorization: `Bearer ${getAuthToken()}`,
+          },
+          body: formDataEncoded.toString(),
+        })
+
+        if (!apiResponse.ok) {
+          const errorData = await apiResponse.json()
+          throw new Error(errorData.error || "Failed to add receipt")
+        }
+
+        response = await apiResponse.json()
       }
 
-      // Use the appropriate endpoint based on whether we're adding or updating
-      const endpoint = isEditMode
-        ? `https://services.stage.zeropaper.online/api/zpu/receipts/update?id=${editReceipt?.id}`
-        : "https://services.stage.zeropaper.online/api/zpu/receipts/add"
-
-      const response = await fetch(endpoint, {
-        method: isEditMode ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Bearer ${getAuthToken()}`,
-        },
-        body: formDataEncoded.toString(),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `Failed to ${isEditMode ? "update" : "add"} receipt`)
-      }
-
-      const data = await response.json()
       setSuccess(true)
       toast({
         title: isEditMode ? "Receipt Updated" : "Receipt Added",
@@ -870,4 +880,3 @@ export default function AddReceiptDialog({
     </Dialog>
   )
 }
-

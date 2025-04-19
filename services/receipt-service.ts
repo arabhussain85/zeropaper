@@ -456,75 +456,139 @@ export async function getReceiptImage(receiptId: string): Promise<string> {
 }
 export async function updateReceipt(receipt: Receipt): Promise<{ success: boolean; receipt?: Receipt }> {
   try {
-    const token = getAuthToken();
+    const token = getAuthToken()
     if (!token) {
-      throw new Error("Authentication required. Please log in again.");
+      throw new Error("Authentication required. Please log in again.")
     }
 
     if (!receipt.id) {
-      throw new Error("Receipt ID is required for updating");
+      throw new Error("Receipt ID is required for updating")
     }
 
-    console.log("Updating receipt:", receipt.id);
+    console.log("Updating receipt with data:", {
+      id: receipt.id,
+      price: receipt.price,
+      productName: receipt.productName,
+      category: receipt.category,
+      // Don't log sensitive data like imageBase64
+    })
 
-    const formatDateForApi = (dateStr?: string): string => {
-      if (!dateStr) return "";
+    // Create FormData object (important: don't use URLSearchParams)
+    const formData = new FormData()
+
+    // Add required fields exactly as shown in Postman
+    formData.append("id", receipt.id)
+    formData.append("price", receipt.price?.toString() || "")
+    formData.append("productName", receipt.productName || "")
+    formData.append("category", receipt.category || "")
+    formData.append("storeLocation", receipt.storeLocation || "")
+    formData.append("storeName", receipt.storeName || "")
+
+    // Safely format date - handle potential invalid dates
+    const formatDateSafely = (dateString?: string): string => {
+      if (!dateString) return ""
+      
       try {
-        const date = new Date(dateStr);
-        const day = date.getDate().toString().padStart(2, "0");
-        const month = (date.getMonth() + 1).toString().padStart(2, "0");
-        const year = date.getFullYear();
-        const hours = date.getHours().toString().padStart(2, "0");
-        const minutes = date.getMinutes().toString().padStart(2, "0");
-        const seconds = date.getSeconds().toString().padStart(2, "0");
-        return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
-      } catch (e) {
-        console.error("Error formatting date:", e);
-        return "";
+        // First check if the date is valid
+        const date = new Date(dateString)
+        
+        // Check if date is valid (will be NaN if invalid)
+        if (isNaN(date.getTime())) {
+          console.warn("Invalid date detected:", dateString)
+          return ""
+        }
+        
+        const day = date.getDate().toString().padStart(2, "0")
+        const month = (date.getMonth() + 1).toString().padStart(2, "0")
+        const year = date.getFullYear()
+        const hours = date.getHours().toString().padStart(2, "0")
+        const minutes = date.getMinutes().toString().padStart(2, "0")
+        const seconds = date.getSeconds().toString().padStart(2, "0")
+        
+        return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`
+      } catch (error) {
+        console.error("Error formatting date:", error)
+        return ""
       }
-    };
+    }
 
-    const formData = new FormData();
-    formData.append("id", receipt.id);
-    formData.append("imageBase64", receipt.imageBase64 || "");
-    formData.append("price", receipt.price?.toString() || "");
-    formData.append("productName", receipt.productName || "");
-    formData.append("category", receipt.category || "");
-    formData.append("date", formatDateForApi(receipt.date));
-    formData.append("refundableUptoDate", formatDateForApi(receipt.refundableUptoDate));
-    formData.append("validUptoDate", formatDateForApi(receipt.validUptoDate));
-    formData.append("storeLocation", receipt.storeLocation || "");
-    formData.append("storeName", receipt.storeName || "");
-    formData.append("currency", receipt.currency || "");
-    // formData.append("receiptType", receipt.receiptType || "");
-    // formData.append("notes", receipt.notes || "");
+    // Format and add date fields - only add if valid
+    const formattedDate = formatDateSafely(receipt.date)
+    if (formattedDate) {
+      formData.append("date", formattedDate)
+      console.log("Formatted date:", formattedDate)
+    } else {
+      // If date is invalid, use current date as fallback
+      const now = new Date()
+      const day = now.getDate().toString().padStart(2, "0")
+      const month = (now.getMonth() + 1).toString().padStart(2, "0")
+      const year = now.getFullYear()
+      const hours = now.getHours().toString().padStart(2, "0")
+      const minutes = now.getMinutes().toString().padStart(2, "0")
+      const seconds = now.getSeconds().toString().padStart(2, "0")
+      const currentDate = `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`
+      
+      formData.append("date", currentDate)
+      console.log("Using current date as fallback:", currentDate)
+    }
 
-    const baseUrl = API_BASE_URL.includes("/api/zpu")
-      ? API_BASE_URL
-      : `${API_BASE_URL}/api/zpu`;
+    // Only add optional date fields if they are valid
+    const formattedValidUptoDate = formatDateSafely(receipt.validUptoDate)
+    if (formattedValidUptoDate) {
+      formData.append("validUptoDate", formattedValidUptoDate)
+    }
 
-    const url = `${baseUrl}/receipts/update`;
+    const formattedRefundableUptoDate = formatDateSafely(receipt.refundableUptoDate)
+    if (formattedRefundableUptoDate) {
+      formData.append("refundableUptoDate", formattedRefundableUptoDate)
+    }
 
-    const response = await fetch(url, {
-      method: "POST",
+    // Add other optional fields
+    if (receipt.currency) formData.append("currency", receipt.currency)
+    if (receipt.imageBase64) formData.append("imageBase64", receipt.imageBase64)
+    if (receipt.uid) formData.append("uid", receipt.uid)
+
+    // Log the form data keys being sent (for debugging)
+    const formDataKeys = []
+    formData.forEach((value, key) => {
+      if (key !== 'imageBase64') { // Don't log image data
+        formDataKeys.push(`${key}: ${typeof value === 'string' && value.length < 100 ? value : '[data]'}`)
+      } else {
+        formDataKeys.push(`${key}: [image data]`)
+      }
+    })
+    console.log("Form data being sent:", formDataKeys)
+
+    // Use the exact endpoint from Postman
+    const response = await fetch("https://services.stage.zeropaper.online/api/zpu/receipts/update", {
+      method: "PUT",
       headers: {
         Authorization: `Bearer ${token}`,
-        // ❌ Don't set Content-Type here — let browser set it for FormData
-        Accept: "application/json",
+        // IMPORTANT: Do NOT set Content-Type when using FormData
       },
       body: formData,
-    });
+    })
+
+    // Log response status for debugging
+    console.log("Update receipt response status:", response.status)
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Server error response:", errorText);
-      throw new Error(`Failed to update receipt: ${response.status} ${response.statusText}. Details: ${errorText}`);
+      let errorMessage = `Failed to update receipt: ${response.status} ${response.statusText}`
+      try {
+        const errorText = await response.text()
+        console.error("Server error response:", errorText)
+        errorMessage += `. Details: ${errorText}`
+      } catch (e) {
+        console.error("Could not read error response text")
+      }
+      throw new Error(errorMessage)
     }
 
-    const data = await response.json();
-    return { success: true, receipt: data };
+    const data = await response.json()
+    console.log("Update receipt success response:", data)
+    return { success: true, receipt: data }
   } catch (error) {
-    console.error("Error updating receipt:", error);
-    return { success: false };
+    console.error("Error updating receipt:", error)
+    return { success: false }
   }
 }
